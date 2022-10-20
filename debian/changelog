@@ -1,0 +1,44 @@
+zxing-cpp (1.2.0-1) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Boyuan Yang <byang@debian.org>  Tue, 17 Aug 2021 20:52:32 -0400
+
+zxing-cpp (1.2.0-1~exp1) experimental; urgency=medium
+
+  * New upstream release.
+  * debian/control: Add new build-dependency: qtbase5-dev.
+
+ -- Boyuan Yang <byang@debian.org>  Wed, 16 Jun 2021 16:24:25 -0400
+
+zxing-cpp (1.1.1-2) unstable; urgency=medium
+
+  * debian/control: Update build-dependency and package description
+    according to upstream recommendation.
+  * Rebuild before Debian 11 release.
+
+ -- Boyuan Yang <byang@debian.org>  Sat, 19 Dec 2020 19:31:32 -0500
+
+zxing-cpp (1.1.1-1) unstable; urgency=medium
+
+  * New upstream release. 
+
+ -- Boyuan Yang <byang@debian.org>  Wed, 16 Sep 2020 18:53:42 -0400
+
+zxing-cpp (1.1.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Boyuan Yang <byang@debian.org>  Wed, 05 Aug 2020 16:08:00 -0400
+
+zxing-cpp (1.0.8+ds2-2) unstable; urgency=high
+
+  * Source-only upload to allow testing migration.
+
+ -- Boyuan Yang <byang@debian.org>  Thu, 23 Jan 2020 10:39:58 -0500
+
+zxing-cpp (1.0.8+ds2-1) unstable; urgency=medium
+
+  * Initial release.
+
+ -- Boyuan Yang <byang@debian.org>  Tue, 21 Jan 2020 16:51:37 -0500

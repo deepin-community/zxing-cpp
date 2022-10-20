@@ -1,0 +1,51 @@
+Source: zxing-cpp
+Section: libs
+Priority: optional
+Maintainer: Boyuan Yang <byang@debian.org>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake (>= 3.10),
+ qtbase5-dev,
+ qtdeclarative5-dev,
+ qtmultimedia5-dev,
+Rules-Requires-Root: no
+Standards-Version: 4.5.1
+Homepage: https://github.com/nu-book/zxing-cpp
+Vcs-Git: https://salsa.debian.org/debian/zxing-cpp.git
+Vcs-Browser: https://salsa.debian.org/debian/zxing-cpp
+
+Package: libzxingcore-dev
+Architecture: any
+Section: libdevel
+Depends:
+ ${misc:Depends},
+ libzxingcore1 (= ${binary:Version}),
+Description: C++ port of ZXing library (development files)
+ ZXing-C++ ("zebra crossing") is an open-source, multi-format 1D/2D
+ barcode image processing library implemented in C++.
+ .
+ It was originally ported from the Java ZXing library but has been
+ developed further and now includes many improvements in terms of
+ quality and performance. It can both read and write barcodes in a
+ number of formats:  QR Code, DataMatrix, Aztec, PDF417, UPC-A, UPC-E,
+ EAN-8, EAN-13, DataBar/RSS, Code 39, Code 93, Code 128, Codabar, ITF.
+ .
+ This package provides development files for zxing-cpp library.
+
+Package: libzxingcore1
+Architecture: any
+Multi-Arch: same
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: C++ port of ZXing library (library files)
+ ZXing-C++ ("zebra crossing") is an open-source, multi-format 1D/2D
+ barcode image processing library implemented in C++.
+ .
+ It was originally ported from the Java ZXing library but has been
+ developed further and now includes many improvements in terms of
+ quality and performance. It can both read and write barcodes in a
+ number of formats:  QR Code, DataMatrix, Aztec, PDF417, UPC-A, UPC-E,
+ EAN-8, EAN-13, DataBar/RSS, Code 39, Code 93, Code 128, Codabar, ITF.
+ .
+ This package provides library files for zxing-cpp library.

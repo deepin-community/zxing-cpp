@@ -1,0 +1,4 @@
+usr/include/ZXing/
+usr/lib/*/cmake/ZXing/
+usr/lib/*/libZXing.so
+usr/lib/*/pkgconfig/zxing.pc
