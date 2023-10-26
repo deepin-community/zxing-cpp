@@ -23,6 +23,7 @@ class TestReadWrite(unittest.TestCase):
 		self.assertTrue(res.valid)
 		self.assertEqual(res.format, format)
 		self.assertEqual(res.text, text)
+		self.assertEqual(res.bytes, bytes(text, 'utf-8'))
 		self.assertEqual(res.orientation, 0)
 
 	def test_write_read_cycle(self):
@@ -32,11 +33,11 @@ class TestReadWrite(unittest.TestCase):
 
 		res = zxingcpp.read_barcode(img)
 		self.check_res(res, format, text)
+		self.assertEqual(res.symbology_identifier, "]Q1")
 		self.assertEqual(res.position.top_left.x, 4)
 
 		res = zxingcpp.read_barcode(img, formats=format)
 		self.check_res(res, format, text)
-		self.assertEqual(res.position.top_left.x, 4)
 
 	def test_write_read_oned_cycle(self):
 		format = BF.Code128
@@ -51,15 +52,21 @@ class TestReadWrite(unittest.TestCase):
 		self.check_res(res, format, text)
 		self.assertEqual(res.position.top_left.x, 61)
 
+	def test_write_read_multi_cycle(self):
+		format = BF.QRCode
+		text = "I have the best words."
+		img = zxingcpp.write_barcode(format, text)
+
+		res = zxingcpp.read_barcodes(img)[0]
+		self.check_res(res, format, text)
+
 	def test_failed_read(self):
 		import numpy as np
 		res = zxingcpp.read_barcode(
 			np.zeros((100, 100), np.uint8), formats=BF.EAN8 | BF.Aztec, binarizer=zxingcpp.Binarizer.BoolCast
 		)
 
-		self.assertFalse(res.valid)
-		self.assertEqual(res.format, BF.NONE)
-		self.assertEqual(res.text, '')
+		self.assertEqual(res, None)
 
 	@unittest.skipIf(not has_pil, "need PIL for read/write tests")
 	def test_write_read_cycle_pil(self):

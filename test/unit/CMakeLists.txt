@@ -1,17 +1,9 @@
-cmake_minimum_required(VERSION 3.14)
+zxing_add_package(GTest googletest https://github.com/google/googletest.git release-1.11.0)
 
-# Download and unpack googletest at configure time
-include(FetchContent)
-#set(FETCHCONTENT_QUIET Off)
-FetchContent_Declare (googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.10.x)
-# Prevent overriding the parent project's compiler/linker settings on Windows
-set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable (googletest)
-
-# don't install gtest stuff on "make install"
-set (INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+if (GTest_POPULATED)
+    # don't install gtest stuff on "make install"
+    set (INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+endif()
 
 # Our executable
 add_executable (UnitTest
@@ -21,9 +13,14 @@ add_executable (UnitTest
     PseudoRandom.h
     BitHacksTest.cpp
     CharacterSetECITest.cpp
+    ContentTest.cpp
+    ErrorTest.cpp
+    GTINTest.cpp
+    GS1Test.cpp
     ReedSolomonTest.cpp
     TextDecoderTest.cpp
     TextUtfEncodingTest.cpp
+    ThresholdBinarizerTest.cpp
     aztec/AZDetectorTest.cpp
     aztec/AZDecoderTest.cpp
     aztec/AZEncoderTest.cpp
@@ -38,6 +35,7 @@ add_executable (UnitTest
     maxicode/MCDecoderTest.cpp
     oned/ODCodaBarWriterTest.cpp
     oned/ODCode39ExtendedModeTest.cpp
+    oned/ODCode39ReaderTest.cpp
     oned/ODCode39WriterTest.cpp
     oned/ODCode93ReaderTest.cpp
     oned/ODCode93WriterTest.cpp
@@ -48,7 +46,9 @@ add_executable (UnitTest
     oned/ODITFWriterTest.cpp
     oned/ODUPCAWriterTest.cpp
     oned/ODUPCEWriterTest.cpp
-    oned/rss/ODRSSExpandedBinaryDecoderTest.cpp
+    oned/ODDataBarExpandedBitDecoderTest.cpp
+    qrcode/MQRDecoderTest.cpp
+    qrcode/QRBitMatrixParserTest.cpp
     qrcode/QRDataMaskTest.cpp
     qrcode/QRDecodedBitStreamParserTest.cpp
     qrcode/QREncoderTest.cpp
@@ -65,6 +65,7 @@ add_executable (UnitTest
 
 target_include_directories (UnitTest PRIVATE .)
 
-target_link_libraries (UnitTest ZXing::ZXing gtest_main gmock)
+target_link_libraries (UnitTest ZXing::ZXing GTest::gtest_main GTest::gmock)
+target_compile_definitions(UnitTest PRIVATE ZX_USE_UTF8)
 
 add_test(NAME UnitTest COMMAND UnitTest)

@@ -1,0 +1,36 @@
+From: Boyuan Yang <byang@debian.org>
+Date: Wed, 13 Jul 2022 16:29:38 -0400
+Subject: Disable tests without test file
+
+Also see: https://bugs.debian.org/1004653
+---
+ example/CMakeLists.txt       | 2 +-
+ test/blackbox/CMakeLists.txt | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/example/CMakeLists.txt b/example/CMakeLists.txt
+index 36d663a..469eba3 100644
+--- a/example/CMakeLists.txt
++++ b/example/CMakeLists.txt
+@@ -20,7 +20,7 @@ if (BUILD_READERS)
+ 
+     target_link_libraries (ZXingReader ZXing::ZXing stb::stb)
+ 
+-    add_test(NAME ZXingReaderTest COMMAND ZXingReader -fast -format qrcode test.png) # see above
++#    add_test(NAME ZXingReaderTest COMMAND ZXingReader -fast -format qrcode test.png) # see above
+ 
+     install(TARGETS ZXingReader DESTINATION ${CMAKE_INSTALL_BINDIR})
+ endif()
+diff --git a/test/blackbox/CMakeLists.txt b/test/blackbox/CMakeLists.txt
+index 2d7d9e3..9bd0e89 100644
+--- a/test/blackbox/CMakeLists.txt
++++ b/test/blackbox/CMakeLists.txt
+@@ -17,7 +17,7 @@ if (BUILD_READERS)
+     )
+     target_compile_definitions(ReaderTest PRIVATE ZX_USE_UTF8)
+ 
+-    add_test(NAME ReaderTest COMMAND ReaderTest ${CMAKE_CURRENT_SOURCE_DIR}/../samples)
++#    add_test(NAME ReaderTest COMMAND ReaderTest ${CMAKE_CURRENT_SOURCE_DIR}/../samples)
+ endif()
+ 
+ if (BUILD_WRITERS)

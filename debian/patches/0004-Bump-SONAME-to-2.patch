@@ -1,0 +1,37 @@
+From: Boyuan Yang <byang@debian.org>
+Date: Wed, 13 Jul 2022 16:30:48 -0400
+Subject: Bump SONAME to 2
+
+Prepare for future transition due to SONAME change.
+
+See: https://github.com/nu-book/zxing-cpp/issues/333
+---
+ CMakeLists.txt      | 1 +
+ core/CMakeLists.txt | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 513f8c4..58a6d1a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,6 +1,7 @@
+ cmake_minimum_required (VERSION 3.14)
+ 
+ project (ZXing VERSION "1.4.0" LANGUAGES CXX)
++set (ZXING_SONAME 2)
+ 
+ include(GNUInstallDirs)
+ 
+diff --git a/core/CMakeLists.txt b/core/CMakeLists.txt
+index 7382bca..b4cd63a 100644
+--- a/core/CMakeLists.txt
++++ b/core/CMakeLists.txt
+@@ -486,7 +486,7 @@ set_target_properties(ZXing PROPERTIES EXPORT_NAME ZXing)
+ set_target_properties(ZXing PROPERTIES POSITION_INDEPENDENT_CODE ON)
+ if (PROJECT_VERSION)
+     set_target_properties(ZXing PROPERTIES VERSION ${PROJECT_VERSION})
+-    set_target_properties(ZXing PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
++    set_target_properties(ZXing PROPERTIES SOVERSION ${ZXING_SONAME})
+ endif()
+ 
+ set_target_properties(ZXing PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")

@@ -1,18 +1,7 @@
 /*
 * Copyright 2021 gitlost
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
 */
+// SPDX-License-Identifier: Apache-2.0
 
 #include "ByteArray.h"
 #include "DecoderResult.h"
@@ -22,7 +11,7 @@
 
 namespace ZXing::MaxiCode::DecodedBitStreamParser {
 
-DecoderResult Decode(ByteArray&& bytes, const int mode, const std::string& characterSet);
+DecoderResult Decode(ByteArray&& bytes, const int mode);
 
 }
 
@@ -52,7 +41,7 @@ static DecoderResult parse(ByteArray bytes, const int mode)
 	}
 	padded.insert(padded.end(), bytes.begin(), bytes.end());
 	pad(padded);
-	return MaxiCode::DecodedBitStreamParser::Decode(std::move(padded), mode, "");
+	return MaxiCode::DecodedBitStreamParser::Decode(std::move(padded), mode);
 }
 
 // Helper to return Structured Append
@@ -61,28 +50,33 @@ static StructuredAppendInfo info(ByteArray bytes, const int mode)
 	return parse(bytes, mode).structuredAppend();
 }
 
-TEST(MCDecodeTest, StructuredAppend)
+TEST(MCDecodeTest, StructuredAppendSymbologyIdentifier)
 {
 	// Null
 	EXPECT_EQ(info({49}, 2).index, -1); // Mode 2
 	EXPECT_EQ(info({49}, 2).count, -1);
 	EXPECT_TRUE(info({49}, 2).id.empty());
+	EXPECT_EQ(parse({49}, 2).symbologyIdentifier(), "]U1");
 
 	EXPECT_EQ(info({49}, 3).index, -1); // Mode 3
 	EXPECT_EQ(info({49}, 3).count, -1);
 	EXPECT_TRUE(info({49}, 3).id.empty());
+	EXPECT_EQ(parse({49}, 3).symbologyIdentifier(), "]U1");
 
 	EXPECT_EQ(info({49}, 4).index, -1); // Mode 4
 	EXPECT_EQ(info({49}, 4).count, -1);
 	EXPECT_TRUE(info({49}, 4).id.empty());
+	EXPECT_EQ(parse({49}, 4).symbologyIdentifier(), "]U0");
 
 	EXPECT_EQ(info({49}, 5).index, -1); // Mode 5
 	EXPECT_EQ(info({49}, 5).count, -1);
 	EXPECT_TRUE(info({49}, 5).id.empty());
+	EXPECT_EQ(parse({49}, 5).symbologyIdentifier(), "]U0");
 
 	EXPECT_EQ(info({49}, 6).index, -1); // Mode 6
 	EXPECT_EQ(info({49}, 6).count, -1);
 	EXPECT_TRUE(info({49}, 6).id.empty());
+//	EXPECT_TRUE(parse({49}, 6).symbologyIdentifier().empty()); // Not defined for reader initialisation/programming
 
 	// ISO/IEC 16023:2000 4.9.1 example
 	EXPECT_EQ(info({33, 22, 49}, 2).index, 2); // Mode 2 - 3rd position 1-based == index 2

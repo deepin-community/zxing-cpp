@@ -1,13 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 project(ZXingPython)
 
-# get pybind11
-include(FetchContent)
-#set(FETCHCONTENT_QUIET Off)
-FetchContent_Declare (pybind11
-    GIT_REPOSITORY https://github.com/pybind/pybind11.git
-    GIT_TAG v2.6.2)
-FetchContent_MakeAvailable (pybind11)
+set (pybind11_git_repo https://github.com/pybind/pybind11.git)
+set (pybind11_git_rev v2.9.1)
 
 # check if we are called from the top-level ZXing project
 get_directory_property(hasParent PARENT_DIRECTORY)
@@ -24,7 +19,17 @@ if (NOT hasParent)
     if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../../core)
         # In development mode, when the whole zxing-cpp directory is checked out, build against head code.
         add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../core ZXing EXCLUDE_FROM_ALL)
+
+        include(${CMAKE_CURRENT_SOURCE_DIR}/../../zxing.cmake)
+        zxing_add_package(pybind11 pybind11 ${pybind11_git_repo} ${pybind11_git_rev})
     else()
+        # we don't have access to the top-level cmake helpers -> simply fetch it unconditional
+        include(FetchContent)
+        FetchContent_Declare (pybind11
+            GIT_REPOSITORY ${pybind11_git_repo}
+            GIT_TAG ${pybind11_git_rev})
+        FetchContent_MakeAvailable (pybind11)
+
         # Building from python source distribution (which does not include the whole repository but only python part)
         # so we need to get c++ source git to build the python extension. The python distribution version (given in
         # VERSION_INFO), matches the c++ version the distribution must build against ; hence the checkout of
@@ -49,11 +54,15 @@ if (NOT hasParent)
             add_subdirectory(${zxing-cpp_SOURCE_DIR}/core ZXing EXCLUDE_FROM_ALL)
         endif()
     endif()
+else()
+    zxing_add_package(pybind11 pybind11 ${pybind11_git_repo} ${pybind11_git_rev})
 endif()
 
 # build the python module
 pybind11_add_module(zxingcpp zxing.cpp)
 target_link_libraries(zxingcpp PRIVATE ZXing::ZXing)
 
-add_test(NAME PythonTest COMMAND python ${CMAKE_CURRENT_SOURCE_DIR}/test.py -v)
-set_property(TEST PythonTest PROPERTY ENVIRONMENT PYTHONPATH=$<TARGET_FILE_DIR:zxingcpp>)
+if (BUILD_READERS AND BUILD_WRITERS)
+    add_test(NAME PythonTest COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test.py -v)
+    set_property(TEST PythonTest PROPERTY ENVIRONMENT PYTHONPATH=$<TARGET_FILE_DIR:zxingcpp>)
+endif()

@@ -1,0 +1,33 @@
+From: Boyuan Yang <byang@debian.org>
+Date: Sat, 29 Jan 2022 13:58:06 -0500
+Subject: fix python wrapper build
+
+---
+ wrappers/python/CMakeLists.txt | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/wrappers/python/CMakeLists.txt b/wrappers/python/CMakeLists.txt
+index eadfc04..2fe924b 100644
+--- a/wrappers/python/CMakeLists.txt
++++ b/wrappers/python/CMakeLists.txt
+@@ -59,10 +59,20 @@ else()
+ endif()
+ 
+ # build the python module
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(python3 REQUIRED python3)
+ pybind11_add_module(zxingcpp zxing.cpp)
+ target_link_libraries(zxingcpp PRIVATE ZXing::ZXing)
++target_include_directories(zxingcpp PUBLIC ${python3_INCLUDE_DIRS})
++target_compile_options(zxingcpp PUBLIC ${python3_CFLAGS_OTHER})
+ 
+ if (BUILD_READERS AND BUILD_WRITERS)
+     add_test(NAME PythonTest COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test.py -v)
+     set_property(TEST PythonTest PROPERTY ENVIRONMENT PYTHONPATH=$<TARGET_FILE_DIR:zxingcpp>)
+ endif()
++
++install(TARGETS zxingcpp
++    COMPONENT python
++    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
++    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
++    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
