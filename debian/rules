@@ -15,8 +15,17 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export QT_SELECT := 5
 
 %:
-	dh $@
+	dh $@ --with python3
 
+# Disabled flags:
+#
+# BLACKBOX_TESTS: see #1004653
+# UNIT_TESTS: requires tests/samples/* files with unclear license
+# PYTHON_EXECUTABLE: force select default python version
 override_dh_auto_configure:
 	dh_auto_configure -- \
-	        -DBUILD_BLACKBOX_TESTS=OFF   # requires internet connection
+	        -DBUILD_BLACKBOX_TESTS=ON  \
+	        -DBUILD_UNIT_TESTS=OFF     \
+	        -DBUILD_PYTHON_MODULE=ON   \
+	        -DBUILD_SYSTEM_DEPS=ALWAYS \
+	        -DPYTHON_EXECUTABLE:FILEPATH=$(shell command -v $$(py3versions -d))

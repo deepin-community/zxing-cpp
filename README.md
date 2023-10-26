@@ -2,13 +2,13 @@
 
 # ZXing-C++
 
-ZXing-C++ ("zebra crossing") is an open-source, multi-format 1D/2D barcode image processing library implemented in C++.
+ZXing-C++ ("zebra crossing") is an open-source, multi-format linear/matrix barcode image processing library implemented in C++.
 
 It was originally ported from the Java [ZXing Library](https://github.com/zxing/zxing) but has been developed further and now includes many improvements in terms of quality and performance. It can both read and write barcodes in a number of formats.
 
 ## Features
 
-* In pure C++17, no third-party dependencies
+* In pure C++17, no third-party dependencies (for the library)
 * Stateless, thread-safe readers/scanners and writers/generators
 * Wrapper/Bindings for:
   * WinRT
@@ -18,23 +18,23 @@ It was originally ported from the Java [ZXing Library](https://github.com/zxing/
 
 ## Supported Formats
 
-| 1D product | 1D industrial     | 2D
-| ---------- | ----------------- | --------------
-| UPC-A      | Code 39           | QR Code
-| UPC-E      | Code 93           | DataMatrix
-| EAN-8      | Code 128          | Aztec
-| EAN-13     | Codabar           | PDF417
-| DataBar    | ITF               | MaxiCode (beta)
-|            | DataBar Expanded  |
+| Linear product | Linear industrial | Matrix             |
+|----------------|-------------------|--------------------|
+| UPC-A          | Code 39           | QR Code            |
+| UPC-E          | Code 93           | Micro QR Code      |
+| EAN-8          | Code 128          | Aztec              |
+| EAN-13         | Codabar           | DataMatrix         |
+| DataBar        | DataBar Exanded   | PDF417             |
+|                | ITF               | MaxiCode (partial) |
 
-Note: DataBar used to be called RSS.
+Note: DataBar used to be called RSS. DataBar is not supported for writing.
 
 ## Getting Started
 
 ### To read barcodes:
 As an example, have a look at [`ZXingReader.cpp`](example/ZXingReader.cpp).
 1. Load your image into memory (3rd-party library required).
-2. Call `ReadBarcode()` from [`ReadBarcode.h`](core/src/ReadBarcode.h), the simplest API to get a `Result`.
+2. Call `ReadBarcodes()` from [`ReadBarcode.h`](core/src/ReadBarcode.h), the simplest API to get a list of `Result` objects.
 
 ### To write barcodes:
 As an example, have a look at [`ZXingWriter.cpp`](example/ZXingWriter.cpp).
@@ -57,20 +57,21 @@ PM> Install-Package huycn.zxingcpp.winrt
 ## Build Instructions
 
 ### Standard setup on Windows/macOS/Linux
-1. Make sure [CMake](https://cmake.org) version 3.10 or newer is installed.
-2. Make sure a C++17 compliant compiler is installed (minimum VS 2019 16.8 / gcc 7 / clang 5)
+1. Make sure [CMake](https://cmake.org) version 3.14 or newer is installed.
+2. Make sure a C++17 compliant compiler is installed (minimum VS 2019 16.8 / gcc 7 / clang 5).
 3. See the cmake `BUILD_...` options to enable the testing code, python wrapper, etc.
 
 ### Windows Universal Platform
-1. Download and install [CMake](https://cmake.org) 3.4 or more recent if it's not already installed.
-2. Edit the file [`wrappers/winrt/BuildWinCom.bat`](wrappers/winrt/BuildWinCom.bat) to adjust the path to your CMake installation.
-3. Double-click on the batch script to run it.
-4. If the build succeeds, it will put the results in the folder UAP which is ready-to-use SDK extension.
+1. Make sure [CMake](https://cmake.org) version 3.4 or newer is installed.
+2. Make sure a C++17 compliant compiler is installed (minimum VS 2019 16.8).
+3. Edit the file [`wrappers/winrt/BuildWinCom.bat`](wrappers/winrt/BuildWinCom.bat) to adjust the path to your CMake installation.
+4. Double-click on the batch script to run it.
+5. If the build succeeds, it will put the results in the folder UAP which is ready-to-use SDK extension.
 
 ### Android
 1. Install AndroidStudio including NDK and CMake (see 'SDK Tools').
 2. Open the project in folder [wrappers/android](wrappers/android).
-3. The project contains 2 modules: `zxingcpp` is the wrapper library, `app` is the demo app using `zxingcpp`
+3. The project contains 2 modules: `zxingcpp` is the wrapper library, `app` is the demo app using `zxingcpp`.
 
 ### WebAssembly
 1. [Install Emscripten](https://kripken.github.io/emscripten-site/docs/getting_started/) if not done already.

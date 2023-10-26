@@ -1,44 +1,61 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: ZXing-C++
 Source: https://github.com/nu-book/zxing-cpp
+Files-Excluded:
+ test/samples/*
+ wrappers/android/*
+ wrappers/winrt/*
 
 Files: *
 Copyright:
  2007-2016 ZXing authors
- 2019 Nu-book Inc.
+ 2019-2022 Nu-book Inc.
 License: Apache-2.0
 Comment:
  The full ZXing authors list can be found in the AUTHORS.ZXing file as
  distributed in the docs.
 
 Files: debian/*
-Copyright: 2020, Boyuan Yang <byang@debian.org>
+Copyright: 2020-2022, Boyuan Yang <byang@debian.org>
 License: CC0-1.0
 
 Files: core/*
 Copyright:
  2016 ZXing authors
- 2016-2019 Nu-book Inc.
+ 2016-2021 Nu-book Inc.
+ 2017-2022 Axel Waggershauser
+ 2016 Huy Cuong Nguyen
+ 2006 Jeremias Maerki
 License: Apache-2.0
 
-Files: examples/*
+Files: example/*
 Copyright:
  2016 Nu-book Inc.
+ 2020-2022 Axel Waggershauser
 License: Apache-2.0
 
-Files: wrappers/android/java/com/zxing/BarcodeFormat.java
-Copyright: 2007 ZXing authors
+Files:
+ test/blackbox/*
+Copyright:
+ 2016 Nu-book Inc.
+ 2019 Axel Waggershauser
 License: Apache-2.0
 
-Files: wrappers/android/java/com/zxing/BarcodeReader.java
-       wrappers/android/jni/*
-       wrappers/gdiplus/*
-Copyright: 2016 Nu-book Inc.
+Files:
+ test/unit/*
+Copyright:
+ 2016 Jeremias Maerki
+ 2017-2022 Axel Waggershauser
+ 2017 Huy Cuong Nguyen
+ 2008-2017 ZXing authors
+ 2021-2022 gitlost
 License: Apache-2.0
 
-Files: wrappers/gdiplus/BarcodeGenerator.*
-Copyright: 2017 Huy Cuong Nguyen
-License: Apache-2.0
+Files:
+ wrappers/wasm/base64ArrayBuffer.js
+Copyright:
+ 2011 Jon Leighton
+License: Expat
 
 Files:
  core/src/textcodec/Big5TextDecoder.cpp
@@ -85,7 +102,7 @@ License: LGPL-2.1 with Qt-LGPL-exception-1.1
  2.1, the object code form of a "work that uses the Library" may incorporate
  material from a header file that is part of the Library.  You may distribute
  such object code under terms of your choice, provided that:
-     (i)   the header files of the Library have not been modified; and 
+     (i)   the header files of the Library have not been modified; and
      (ii)  the incorporated material is limited to numerical parameters, data
            structure layouts, accessors, macros, inline functions and
            templates; and
@@ -123,7 +140,7 @@ License: LGPL-3.0 with Qt-LGPL-exception-1.1
  2.1, the object code form of a "work that uses the Library" may incorporate
  material from a header file that is part of the Library.  You may distribute
  such object code under terms of your choice, provided that:
-     (i)   the header files of the Library have not been modified; and 
+     (i)   the header files of the Library have not been modified; and
      (ii)  the incorporated material is limited to numerical parameters, data
            structure layouts, accessors, macros, inline functions and
            templates; and
@@ -147,3 +164,22 @@ License: CC0-1.0
 License: Apache-2.0
  On Debian systems, the complete text of the Apache License Version 2.0
  can be found in "/usr/share/common-licenses/Apache-2.0".
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to
+ deal in the Software without restriction, including without limitation
+ the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ and/or sell copies of the Software, and to permit persons to whom the
+ Software is furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included
+ in all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -15,7 +15,12 @@ if (WINRT)
     )
 endif()
 
-set (ZXING_CORE_LOCAL_DEFINES)
+set (ZXING_CORE_LOCAL_DEFINES
+    $<$<BOOL:${BUILD_READERS}>:-DZXING_BUILD_READERS>
+    $<$<BOOL:${BUILD_WRITERS}>:-DZXING_BUILD_WRITERS>
+    $<$<BOOL:${BUILD_UNIT_TESTS}>:-DZXING_BUILD_FOR_TEST>
+    -DZX_USE_UTF8 # silence deprecation warning in Result.h
+)
 if (MSVC)
     set (ZXING_CORE_LOCAL_DEFINES ${ZXING_CORE_LOCAL_DEFINES}
         -D_SCL_SECURE_NO_WARNINGS
@@ -25,7 +30,7 @@ if (MSVC)
     )
 else()
     set (ZXING_CORE_LOCAL_DEFINES ${ZXING_CORE_LOCAL_DEFINES}
-        -Wall -Wextra -Wno-missing-braces -Werror=undef)
+        -Wall -Wextra -Wno-missing-braces -Werror=undef -Werror=return-type)
 endif()
 
 
@@ -45,12 +50,15 @@ set (COMMON_FILES
     src/ByteArray.h
     src/ByteMatrix.h
     src/CharacterSet.h
+    src/CharacterSet.cpp
     src/CharacterSetECI.h
-    src/CharacterSetECI.cpp
     src/ConcentricFinder.h
     src/ConcentricFinder.cpp
     src/CustomData.h
+    src/ECI.h
+    src/ECI.cpp
     src/Flags.h
+    src/Generator.h
     src/GenericGF.h
     src/GenericGF.cpp
     src/GenericGFPoly.h
@@ -67,11 +75,11 @@ set (COMMON_FILES
     src/TextUtfEncoding.h
     src/TextUtfEncoding.cpp
     src/TritMatrix.h
+    src/ZXAlgorithms.h
     src/ZXBigInteger.h
     src/ZXBigInteger.cpp
     src/ZXConfig.h
     src/ZXNullable.h
-    src/ZXContainerAlgorithms.h
     src/ZXTestSupport.h
 )
 if (BUILD_READERS)
@@ -80,22 +88,24 @@ if (BUILD_READERS)
         src/BinaryBitmap.cpp
         src/BitSource.h
         src/BitSource.cpp
+        src/Content.h
+        src/Content.cpp
         src/DecodeHints.h
         src/DecodeHints.cpp
         src/DecodeStatus.h
         src/DecodeStatus.cpp
         src/DecoderResult.h
         src/DetectorResult.h
-        src/GenericLuminanceSource.h
-        src/GenericLuminanceSource.cpp
+        src/Error.h
         src/GlobalHistogramBinarizer.h
         src/GlobalHistogramBinarizer.cpp
         src/GridSampler.h
         src/GridSampler.cpp
+        src/GS1.h
+        src/GS1.cpp
         src/HybridBinarizer.h
         src/HybridBinarizer.cpp
-        src/LuminanceSource.h
-        src/LuminanceSource.cpp
+        src/ImageView.h
         src/MultiFormatReader.h
         src/MultiFormatReader.cpp
         src/PerspectiveTransform.h
@@ -107,8 +117,6 @@ if (BUILD_READERS)
         src/ReedSolomonDecoder.cpp
         src/Result.h
         src/Result.cpp
-        src/ResultMetadata.h
-        src/ResultMetadata.cpp
         src/ResultPoint.h
         src/ResultPoint.cpp
         src/TextDecoder.h
@@ -130,6 +138,42 @@ if (BUILD_WRITERS)
     )
 endif()
 
+# define subset of public headers that get distributed with the binaries
+set (PUBLIC_HEADERS
+    src/BarcodeFormat.h
+    src/BitHacks.h
+    src/ByteArray.h
+    src/CharacterSet.h
+    src/CharacterSetECI.h # deprecated
+    src/Flags.h
+    src/GTIN.h
+    src/TextUtfEncoding.h
+    src/ZXAlgorithms.h
+    src/ZXConfig.h
+)
+if (BUILD_READERS)
+    set (PUBLIC_HEADERS ${PUBLIC_HEADERS}
+        src/Content.h
+        src/DecodeHints.h
+        src/DecodeStatus.h
+        src/Error.h
+        src/ImageView.h
+        src/Point.h
+        src/Quadrilateral.h
+        src/ReadBarcode.h
+        src/Result.h
+        src/StructuredAppend.h
+    )
+endif()
+if (BUILD_WRITERS)
+    set (PUBLIC_HEADERS ${PUBLIC_HEADERS}
+        src/BitMatrix.h
+        src/BitMatrixIO.h
+        src/Matrix.h
+        src/MultiFormatWriter.h
+    )
+endif()
+# end of public header set
 
 set (AZTEC_FILES
 )
@@ -162,6 +206,8 @@ endif()
 set (DATAMATRIX_FILES
     src/datamatrix/DMBitLayout.h
     src/datamatrix/DMBitLayout.cpp
+    src/datamatrix/DMVersion.h
+    src/datamatrix/DMVersion.cpp
 )
 if (BUILD_READERS)
     set (DATAMATRIX_FILES ${DATAMATRIX_FILES}
@@ -171,8 +217,6 @@ if (BUILD_READERS)
         src/datamatrix/DMDecoder.cpp
         src/datamatrix/DMDetector.h
         src/datamatrix/DMDetector.cpp
-        src/datamatrix/DMVersion.h
-        src/datamatrix/DMVersion.cpp
         src/datamatrix/DMReader.h
         src/datamatrix/DMReader.cpp
     )
@@ -227,6 +271,8 @@ if (BUILD_READERS)
         src/oned/ODDataBarCommon.cpp
         src/oned/ODDataBarReader.h
         src/oned/ODDataBarReader.cpp
+        src/oned/ODDataBarExpandedBitDecoder.h
+        src/oned/ODDataBarExpandedBitDecoder.cpp
         src/oned/ODDataBarExpandedReader.h
         src/oned/ODDataBarExpandedReader.cpp
         src/oned/ODITFReader.h
@@ -261,20 +307,6 @@ if (BUILD_WRITERS)
         src/oned/ODUPCAWriter.cpp
         src/oned/ODWriterHelper.h
         src/oned/ODWriterHelper.cpp
-    )
-endif()
-
-
-set (ONED_RSS_FILES
-)
-if (BUILD_READERS)
-    set (ONED_RSS_FILES ${ONED_RSS_FILES}
-        src/oned/rss/ODRSSExpandedBinaryDecoder.h
-        src/oned/rss/ODRSSExpandedBinaryDecoder.cpp
-        src/oned/rss/ODRSSFieldParser.h
-        src/oned/rss/ODRSSFieldParser.cpp
-        src/oned/rss/ODRSSGenericAppIdDecoder.h
-        src/oned/rss/ODRSSGenericAppIdDecoder.cpp
     )
 endif()
 
@@ -340,7 +372,6 @@ if (BUILD_READERS)
         src/qrcode/QRDataMask.h
         src/qrcode/QRDecoder.h
         src/qrcode/QRDecoder.cpp
-        src/qrcode/QRDecoderMetadata.h
         src/qrcode/QRDetector.h
         src/qrcode/QRDetector.cpp
         src/qrcode/QRECB.h
@@ -401,7 +432,6 @@ source_group (Sources\\aztec FILES ${AZTEC_FILES})
 source_group (Sources\\datamatrix FILES ${DATAMATRIX_FILES})
 source_group (Sources\\maxicode FILES ${MAXICODE_FILES})
 source_group (Sources\\oned FILES ${ONED_FILES})
-source_group (Sources\\oned\\rss FILES ${ONED_RSS_FILES})
 source_group (Sources\\pdf417 FILES ${PDF417_FILES})
 source_group (Sources\\qrcode FILES ${QRCODE_FILES})
 source_group (Sources\\textcodec FILES ${TEXT_CODEC_FILES})
@@ -416,7 +446,6 @@ add_library (ZXing
     ${DATAMATRIX_FILES}
     ${MAXICODE_FILES}
     ${ONED_FILES}
-    ${ONED_RSS_FILES}
     ${PDF417_FILES}
     ${QRCODE_FILES}
     ${TEXT_CODEC_FILES}
@@ -453,12 +482,14 @@ add_library(ZXing::ZXing ALIAS ZXing)
 add_library(ZXing::Core ALIAS ZXing)
 
 set_target_properties(ZXing PROPERTIES EXPORT_NAME ZXing)
-# force position indepent code to be able to link it as static lib into a DLL (e.g. the python module)
+# force position independent code to be able to link it as static lib into a DLL (e.g. the python module)
 set_target_properties(ZXing PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if (PROJECT_VERSION)
     set_target_properties(ZXing PROPERTIES VERSION ${PROJECT_VERSION})
     set_target_properties(ZXing PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
 endif()
+
+set_target_properties(ZXing PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
 include (GNUInstallDirs)
 
@@ -467,7 +498,15 @@ install (
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    INCLUDES DESTINATION include
+#    INCLUDES DESTINATION include
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ZXing"
+)
+
+configure_file (ZXVersion.h.in ZXVersion.h)
+
+install (
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/ZXVersion.h"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ZXing"
 )
 
 if(MSVC)
@@ -476,5 +515,6 @@ if(MSVC)
         COMPILE_PDB_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ZXing.pdb
             DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            CONFIGURATIONS Debug RelWithDebInfo)
+            CONFIGURATIONS Debug RelWithDebInfo 
+            OPTIONAL)
 endif()

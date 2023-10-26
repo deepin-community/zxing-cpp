@@ -1,46 +1,28 @@
 /*
 * Copyright 2017 Huy Cuong Nguyen
 * Copyright 2013 ZXing authors
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
 */
+// SPDX-License-Identifier: Apache-2.0
 
 #include "aztec/AZHighLevelEncoder.h"
 #include "BitArray.h"
 #include "BitArrayUtility.h"
+#include "DecoderResult.h"
 #include "StructuredAppend.h"
 #include "TextDecoder.h"
 
 #include "gtest/gtest.h"
 #include <algorithm>
 
-namespace ZXing {
-	namespace Aztec {
-		std::wstring GetEncodedData(const std::vector<bool>& correctedBits, const std::string& characterSet,
-									StructuredAppendInfo& sai);
-	}
+namespace ZXing::Aztec {
+
+DecoderResult Decode(const BitArray& bits);
+
 }
 
 using namespace ZXing;
 
 namespace {
-	
-	std::vector<bool> ToBoolArray(const BitArray& arr) {
-		std::vector<bool> result(arr.size());
-		std::copy_n(arr.begin(), arr.size(), result.begin());
-		return result;
-	}
-
 	std::string StripSpaces(std::string str) {
 		str.erase(std::remove_if(str.begin(), str.end(), isspace), str.end());
 		return str;
@@ -49,16 +31,14 @@ namespace {
 	void TestHighLevelEncodeString(const std::string& s, const std::string& expectedBits) {
 		BitArray bits = Aztec::HighLevelEncoder::Encode(s);
 		EXPECT_EQ(Utility::ToString(bits), StripSpaces(expectedBits)) << "highLevelEncode() failed for input string: " + s;
-		StructuredAppendInfo sai;
-		EXPECT_EQ(TextDecoder::FromLatin1(s), Aztec::GetEncodedData(ToBoolArray(bits), "", sai));
+		EXPECT_EQ(TextDecoder::FromLatin1(s), Aztec::Decode(bits).text());
 	}
 
 	void TestHighLevelEncodeString(const std::string& s, int expectedReceivedBits) {
 		BitArray bits = Aztec::HighLevelEncoder::Encode(s);
 		int receivedBitCount = Size(Utility::ToString(bits));
 		EXPECT_EQ(receivedBitCount, expectedReceivedBits) << "highLevelEncode() failed for input string: " + s;
-		StructuredAppendInfo sai;
-		EXPECT_EQ(TextDecoder::FromLatin1(s), Aztec::GetEncodedData(ToBoolArray(bits), "", sai));
+		EXPECT_EQ(ByteArray(s), Aztec::Decode(bits).content().bytes);
 	}
 }
 

@@ -1,27 +1,16 @@
 /*
 * Copyright 2016 Nu-book Inc.
 * Copyright 2019 Axel Waggershauser
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
 */
+// SPDX-License-Identifier: Apache-2.0
 
 #include "BlackboxTestRunner.h"
 
+#include "DecoderResult.h"
 #include "ImageLoader.h"
 #include "ReadBarcode.h"
-#include "TextUtfEncoding.h"
 #include "ThresholdBinarizer.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 #include "pdf417/PDFReader.h"
 #include "qrcode/QRReader.h"
 
@@ -34,6 +23,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -58,9 +48,7 @@ namespace {
 		TC tc[2] = {};
 		int rotation = 0; // The rotation in degrees clockwise to use for this test.
 
-		TestCase(int mntf, int mnts, int mmf, int mms, int r)
-			: tc{{"fast", mntf, mmf}, {"slow", mnts, mms}}, rotation(r)
-		{}
+		TestCase(int mntf, int mnts, int mmf, int mms, int r) : tc{{"fast", mntf, mmf}, {"slow", mnts, mms}}, rotation(r) {}
 		TestCase(int mntf, int mnts, int r) : TestCase(mntf, mnts, 0, 0, r) {}
 		TestCase(int mntp, int mmp, PureTag) : tc{{"pure", mntp, mmp}} {}
 	};
@@ -70,6 +58,65 @@ namespace {
 		int maxAllowed; // Maximum number of images which can fail due to successfully reading the wrong contents
 		int rotation;   // The rotation in degrees clockwise to use for this test.
 	};
+}
+
+// Helper for `compareResult()` - map `key` to Result property, converting value to std::string
+static std::string getResultValue(const Result& result, const std::string& key)
+{
+	if (key == "contentType")
+		return ToString(result.contentType());
+	if (key == "ecLevel")
+		return result.ecLevel();
+	if (key == "orientation")
+		return std::to_string(result.orientation());
+	if (key == "symbologyIdentifier")
+		return result.symbologyIdentifier();
+	if (key == "sequenceSize")
+		return std::to_string(result.sequenceSize());
+	if (key == "sequenceIndex")
+		return std::to_string(result.sequenceIndex());
+	if (key == "sequenceId")
+		return result.sequenceId();
+	if (key == "isLastInSequence")
+		return result.isLastInSequence() ? "true" : "false";
+	if (key == "isPartOfSequence")
+		return result.isPartOfSequence() ? "true" : "false";
+	if (key == "isMirrored")
+		return result.isMirrored() ? "true" : "false";
+	if (key == "readerInit")
+		return result.readerInit() ? "true" : "false";
+
+	return fmt::format("***Unknown key '{}'***", key);
+}
+
+// Read ".result.txt" file contents `expected` with lines "key=value" and compare to `actual`
+static bool compareResult(const Result& result, const std::string& expected, std::string& actual)
+{
+	bool ret = true;
+
+	actual.clear();
+	actual.reserve(expected.size());
+
+	std::stringstream expectedLines(expected);
+	std::string expectedLine;
+	while (std::getline(expectedLines, expectedLine)) {
+		if (expectedLine.empty() || expectedLine[0] == '#')
+			continue;
+		auto equals = expectedLine.find('=');
+		if (equals == std::string::npos) {
+			actual += "***Bad format, missing equals***\n";
+			return false;
+		}
+		std::string key = expectedLine.substr(0, equals);
+		std::string expectedValue = expectedLine.substr(equals + 1);
+		std::string actualValue = getResultValue(result, key);
+		if (actualValue != expectedValue) {
+			ret = false;
+			actualValue += " ***Mismatch***";
+		}
+		actual += key + '=' + actualValue + '\n';
+	}
+	return ret;
 }
 
 static std::string checkResult(const fs::path& imgPath, std::string_view expectedFormat, const Result& result)
@@ -82,15 +129,22 @@ static std::string checkResult(const fs::path& imgPath, std::string_view expecte
 		return ifs ? std::optional(std::string(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>())) : std::nullopt;
 	};
 
+	if (auto expected = readFile(".result.txt")) {
+		std::string actual;
+		if (!compareResult(result, *expected, actual))
+			return fmt::format("Result mismatch: expected\n{} but got\n{}", *expected, actual);
+	}
+
 	if (auto expected = readFile(".txt")) {
-		auto utf8Result = TextUtfEncoding::ToUtf8(result.text());
+		auto utf8Result = result.text();
 		return utf8Result != *expected ? fmt::format("Content mismatch: expected '{}' but got '{}'", *expected, utf8Result) : "";
 	}
 
 	if (auto expected = readFile(".bin")) {
-		std::string latin1Result(result.text().length(), '\0');
-		std::transform(result.text().begin(), result.text().end(), latin1Result.begin(), [](wchar_t c) { return static_cast<char>(c); });
-		return latin1Result != *expected ? fmt::format("Content mismatch: expected '{}' but got '{}'", *expected, latin1Result) : "";
+		ByteArray binaryExpected(*expected);
+		return result.bytes() != binaryExpected
+				   ? fmt::format("Content mismatch: expected '{}' but got '{}'", ToHex(binaryExpected), ToHex(result.bytes()))
+				   : "";
 	}
 
 	return "Error reading file";
@@ -102,7 +156,7 @@ static int totalImageLoadTime = 0;
 int timeSince(std::chrono::steady_clock::time_point startTime)
 {
 	auto duration = std::chrono::steady_clock::now() - startTime;
-	return static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
+	return narrow_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
 }
 
 // pre-load images into cache, so the disc io time does not end up in the timing measurement
@@ -119,8 +173,7 @@ static void printPositiveTestStats(int imageCount, const TestCase::TC& tc)
 {
 	int passCount = imageCount - Size(tc.misReadFiles) - Size(tc.notDetectedFiles);
 
-	fmt::print(" | {}: {:3} of {:3}, misread {} of {}", tc.name, passCount, tc.minPassCount, Size(tc.misReadFiles),
-			   tc.maxMisreads);
+	fmt::print(" | {}: {:3} of {:3}, misread {} of {}", tc.name, passCount, tc.minPassCount, Size(tc.misReadFiles), tc.maxMisreads);
 
 	if (passCount < tc.minPassCount && !tc.notDetectedFiles.empty()) {
 		fmt::print("\nFAILED: Not detected ({}):", tc.name);
@@ -151,8 +204,8 @@ static std::vector<fs::path> getImagesInDirectory(const fs::path& directory)
 	return result;
 }
 
-static void doRunTests(
-	const fs::path& directory, std::string_view format, int totalTests, const std::vector<TestCase>& tests, DecodeHints hints)
+static void doRunTests(const fs::path& directory, std::string_view format, int totalTests, const std::vector<TestCase>& tests,
+					   DecodeHints hints)
 {
 	auto imgPaths = getImagesInDirectory(directory);
 	auto folderName = directory.stem();
@@ -191,37 +244,20 @@ static void doRunTests(
 	}
 }
 
-static auto readPDF417s = [](const BinaryBitmap& image) { return Pdf417::Reader({}).decodeMultiple(image); };
-static auto readQRCodes = [](const BinaryBitmap& image) { return std::list{QRCode::Reader({}).decode(image)}; };
-
-template<typename READER>
-static Result readMultiple(const std::vector<fs::path>& imgPaths, int rotation, READER read)
+static Result readMultiple(const std::vector<fs::path>& imgPaths, std::string_view format)
 {
-	std::list<Result> allResults;
+	Results allResults;
 	for (const auto& imgPath : imgPaths) {
-		auto results = read(ThresholdBinarizer(ImageLoader::load(imgPath), 127));
+		auto results = ReadBarcodes(ImageLoader::load(imgPath),
+									DecodeHints().setFormats(BarcodeFormatFromString(format.data())).setTryDownscale(false));
 		allResults.insert(allResults.end(), results.begin(), results.end());
 	}
 
-	if (allResults.empty())
-		return Result(DecodeStatus::NotFound);
-
-	allResults.sort([](const Result& r1, const Result& r2) { return r1.sequenceIndex() < r2.sequenceIndex(); });
-
-	if (allResults.back().sequenceSize() != Size(allResults) ||
-		!std::all_of(allResults.begin(), allResults.end(),
-					 [&](Result& it) { return it.sequenceId() == allResults.front().sequenceId(); }))
-		return Result(DecodeStatus::FormatError);
-
-	std::wstring text;
-	for (const auto& r : allResults)
-		text.append(r.text());
-
-	return {std::move(text), {}, allResults.front().format()};
+	return MergeStructuredAppendSequence(allResults);
 }
 
-static void doRunStructuredAppendTest(
-	const fs::path& directory, std::string_view format, int totalTests, const std::vector<TestCase>& tests)
+static void doRunStructuredAppendTest(const fs::path& directory, std::string_view format, int totalTests,
+									  const std::vector<TestCase>& tests)
 {
 	auto imgPaths = getImagesInDirectory(directory);
 	auto folderName = directory.stem();
@@ -234,8 +270,7 @@ static void doRunStructuredAppendTest(
 	}
 
 	if (Size(imageGroups) != totalTests)
-		fmt::print("TEST {} => Expected number of tests: {}, got: {} => FAILED\n", folderName, totalTests,
-				   imageGroups.size());
+		fmt::print("TEST {} => Expected number of tests: {}, got: {} => FAILED\n", folderName, totalTests, imageGroups.size());
 
 	for (auto& test : tests) {
 		fmt::print("{:20} @ {:3}, {:3}", folderName.string(), test.rotation, Size(imgPaths));
@@ -243,8 +278,7 @@ static void doRunStructuredAppendTest(
 		auto startTime = std::chrono::steady_clock::now();
 
 		for (const auto& [testPath, testImgPaths] : imageGroups) {
-			auto result = format == "QRCode" ? readMultiple(testImgPaths, test.rotation, readQRCodes)
-											 : readMultiple(testImgPaths, test.rotation, readPDF417s);
+			auto result = readMultiple(testImgPaths, format);
 			if (result.isValid()) {
 				auto error = checkResult(testPath, format, result);
 				if (!error.empty())
@@ -273,7 +307,8 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 			doRunTests(testPathPrefix / directory, format, total, tests, hints);
 	};
 
-	auto runStructuredAppendTest = [&](std::string_view directory, std::string_view format, int total, const std::vector<TestCase>& tests) {
+	auto runStructuredAppendTest = [&](std::string_view directory, std::string_view format, int total,
+									   const std::vector<TestCase>& tests) {
 		if (hasTest(directory))
 			doRunStructuredAppendTest(testPathPrefix / directory, format, total, tests);
 	};
@@ -283,12 +318,12 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		auto startTime = std::chrono::steady_clock::now();
 
 		// clang-format off
-		runTests("aztec-1", "Aztec", 21, {
-			{ 20, 20, 0   },
-			{ 20, 20, 90  },
-			{ 20, 20, 180 },
-			{ 20, 20, 270 },
-			{ 21, 0, pure },
+		runTests("aztec-1", "Aztec", 22, {
+			{ 21, 21, 0   },
+			{ 21, 21, 90  },
+			{ 21, 21, 180 },
+			{ 21, 21, 270 },
+			{ 22, 0, pure },
 		});
 
 		runTests("aztec-2", "Aztec", 22, {
@@ -298,12 +333,12 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 			{ 3, 3, 270 },
 		});
 
-		runTests("datamatrix-1", "DataMatrix", 25, {
-			{ 25, 25, 0   },
-			{  0, 25, 90  },
-			{  0, 25, 180 },
-			{  0, 25, 270 },
-			{ 24, 0, pure },
+		runTests("datamatrix-1", "DataMatrix", 26, {
+			{ 26, 26, 0   },
+			{  0, 26, 90  },
+			{  0, 26, 180 },
+			{  0, 26, 270 },
+			{ 25, 0, pure },
 		});
 
 		runTests("datamatrix-2", "DataMatrix", 13, {
@@ -320,12 +355,12 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 			{  0, 19, 270 },
 		});
 
-		runTests("datamatrix-4", "DataMatrix", 20, {
-			{ 20, 20, 0   },
-			{  0, 20, 90  },
-			{  0, 20, 180 },
-			{  0, 20, 270 },
-			{ 18, 0, pure },
+		runTests("datamatrix-4", "DataMatrix", 21, {
+			{ 21, 21, 0   },
+			{  0, 21, 90  },
+			{  0, 21, 180 },
+			{  0, 21, 270 },
+			{ 19, 0, pure },
 		});
 
 		runTests("codabar-1", "Codabar", 11, {
@@ -334,8 +369,8 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("codabar-2", "Codabar", 4, {
-			{ 3, 3, 0   },
-			{ 3, 3, 180 },
+			{ 2, 3, 0   },
+			{ 2, 3, 180 },
 		});
 
 		runTests("code39-1", "Code39", 4, {
@@ -364,7 +399,7 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("code128-2", "Code128", 21, {
-			{ 19, 21, 0   },
+			{ 18, 21, 0   },
 			{ 19, 21, 180 },
 		});
 
@@ -376,10 +411,11 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		runTests("ean8-1", "EAN-8", 8, {
 			{ 8, 8, 0   },
 			{ 8, 8, 180 },
+			{ 7, 0, pure },
 		});
 
 		runTests("ean13-1", "EAN-13", 31, {
-			{ 26, 29, 0   },
+			{ 24, 29, 0   },
 			{ 23, 29, 180 },
 		});
 
@@ -394,18 +430,18 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("ean13-4", "EAN-13", 22, {
-			{ 7, 14, 0   },
-			{ 8, 14, 180 },
+			{ 6, 13, 0   },
+			{ 8, 13, 180 },
 		});
 
 		runTests("ean13-extension-1", "EAN-13", 5, {
-			{ 4, 5, 0 },
+			{ 3, 5, 0 },
 			{ 3, 5, 180 },
 		}, DecodeHints().setEanAddOnSymbol(EanAddOnSymbol::Require));
 
-		runTests("itf-1", "ITF", 10, {
-			{ 10, 10, 0   },
-			{ 10, 10, 180 },
+		runTests("itf-1", "ITF", 11, {
+			{ 10, 11, 0   },
+			{ 10, 11, 180 },
 		});
 
 		runTests("itf-2", "ITF", 6, {
@@ -422,48 +458,49 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("upca-1", "UPC-A", 12, {
-			{  9, 12, 0, 1, 0   },
-			{ 11, 12, 0, 1, 180 },
+			{  9, 12, 0   },
+			{ 11, 12, 180 },
 		});
 
 		runTests("upca-2", "UPC-A", 36, {
 			{ 17, 22, 0   },
-			{ 18, 22, 180 },
+			{ 16, 22, 180 },
 		});
 
 		runTests("upca-3", "UPC-A", 21, {
-			{ 7, 10, 0, 1, 0   },
-			{ 8, 10, 0, 1, 180 },
+			{ 7, 10, 0   },
+			{ 8, 10, 180 },
 		});
 
 		runTests("upca-4", "UPC-A", 19, {
-			{ 9, 11, 0, 1, 0   },
-			{ 9, 11, 0, 1, 180 },
+			{ 8, 12, 0   },
+			{ 9, 12, 180 },
 		});
 
 		runTests("upca-5", "UPC-A", 32, {
 			{ 17, 20, 0   },
-			{ 19, 20, 180 },
+			{ 18, 20, 180 },
 		});
 		
 		runTests("upca-extension-1", "UPC-A", 6, {
-			{ 3, 6, 0 },
-			{ 4, 6, 180 },
+			{ 4, 4, 0 },
+			{ 3, 4, 180 },
 		}, DecodeHints().setEanAddOnSymbol(EanAddOnSymbol::Require));
 
 		runTests("upce-1", "UPC-E", 3, {
 			{ 3, 3, 0   },
 			{ 3, 3, 180 },
+			{ 3, 0, pure },
 		});
 
 		runTests("upce-2", "UPC-E", 28, {
-			{ 19, 22, 0, 1, 0   },
+			{ 17, 22, 0, 1, 0   },
 			{ 20, 22, 1, 1, 180 },
 		});
 
 		runTests("upce-3", "UPC-E", 11, {
-			{ 6, 8, 0   },
-			{ 6, 8, 180 },
+			{ 5, 7, 0   },
+			{ 6, 7, 180 },
 		});
 
 		runTests("rss14-1", "DataBar", 6, {
@@ -472,13 +509,14 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("rss14-2", "DataBar", 16, {
-			{ 8 , 10, 0   },
-			{ 10, 10, 180 },
+			{ 8, 10, 0   },
+			{ 9, 10, 180 },
 		});
 
 		runTests("rssexpanded-1", "DataBarExpanded", 33, {
 			{ 33, 33, 0   },
 			{ 33, 33, 180 },
+			{ 33, 0, pure },
 		});
 
 		runTests("rssexpanded-2", "DataBarExpanded", 15, {
@@ -487,18 +525,22 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 		});
 
 		runTests("rssexpanded-3", "DataBarExpanded", 118, {
-			{ 118, 118, 0   },
-			{ 118, 118, 180 },
+			// TODO: See HRIFromGS1. 13.png and 66.png are seemingly invalid symbols
+			{ 116, 116, 0   },
+			{ 116, 116, 180 },
+			{ 116, 0, pure },
 		});
 
 		runTests("rssexpandedstacked-1", "DataBarExpanded", 65, {
-			{ 60, 65, 0   },
-			{ 60, 65, 180 },
+			// TODO: See HRIFromGS1. 13.png is seemingly invalid symbol
+			{ 60, 64, 0   },
+			{ 60, 64, 180 },
+			{ 60, 0, pure },
 		});
 
-		runTests("rssexpandedstacked-2", "DataBarExpanded", 7, {
-			{ 2, 7, 0   },
-			{ 2, 7, 180 },
+		runTests("rssexpandedstacked-2", "DataBarExpanded", 2, {
+			{ 2, 2, 0   },
+			{ 2, 2, 180 },
 		});
 
 		runTests("qrcode-1", "QRCode", 16, {
@@ -508,12 +550,12 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 			{ 16, 16, 270 },
 		});
 
-		runTests("qrcode-2", "QRCode", 40, {
-			{ 38, 38, 0   },
-			{ 38, 38, 90  },
-			{ 38, 38, 180 },
-			{ 38, 38, 270 },
-			{ 20, 1, pure }, // the misread is the 'outer' symbol in 16.png
+		runTests("qrcode-2", "QRCode", 46, {
+			{ 44, 44, 0   },
+			{ 44, 44, 90  },
+			{ 44, 44, 180 },
+			{ 44, 44, 270 },
+			{ 21, 1, pure }, // the misread is the 'outer' symbol in 16.png
 		});
 
 		runTests("qrcode-3", "QRCode", 28, {
@@ -549,30 +591,42 @@ int runBlackBoxTests(const fs::path& testPathPrefix, const std::set<std::string>
 			{ 1, 1, 0   },
 		});
 
+		runTests("microqrcode-1", "MicroQRCode", 16, {
+			{ 15, 15, 0   },
+			{ 15, 15, 90  },
+			{ 15, 15, 180 },
+			{ 14, 14, 270 },
+			{ 9, 0, pure },
+		});
+
 		runTests("pdf417-1", "PDF417", 17, {
-			{ 16, 16, 0   },
-			{  1,  1, 90  },
-			{ 16, 16, 180 },
-			{  1,  1, 270 },
+			{ 16, 17, 0   },
+			{  1, 17, 90  },
+			{ 16, 17, 180 },
+			{  1, 17, 270 },
 			{ 17, 0, pure },
 		});
 
 		runTests("pdf417-2", "PDF417", 25, {
 			{ 25, 25, 0   },
+			{  0, 25, 90   },
 			{ 25, 25, 180 },
+			{  0, 25, 270   },
 		});
 
 		runTests("pdf417-3", "PDF417", 16, {
 			{ 16, 16, 0   },
+			{  0, 16, 90  },
 			{ 16, 16, 180 },
+			{  0, 16, 270 },
 			{ 7, 0, pure },
 		});
 
-		runStructuredAppendTest("pdf417-4", "PDF417", 2, {
-			{ 2, 2, 0   },
+		runStructuredAppendTest("pdf417-4", "PDF417", 3, {
+			{ 3, 3, 0   },
 		});
 
-		runTests("falsepositives-1", "None", 24, {
+		runTests("falsepositives-1", "None", 26, {
 			{ 0, 0, 0, 0, 0   },
 			{ 0, 0, 0, 0, 90  },
 			{ 0, 0, 0, 0, 180 },

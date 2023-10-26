@@ -1,0 +1,5 @@
+0001-CMakeLists.txt-Use-top-level-GNUInstallDirs.patch
+0002-fix-python-wrapper-build.patch
+0003-Disable-tests-without-test-file.patch
+0004-Bump-SONAME-to-2.patch
+0005-test-update-to-libfmt-v9.0.0.patch
