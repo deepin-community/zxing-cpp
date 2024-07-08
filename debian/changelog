@@ -1,3 +1,9 @@
+zxing-cpp (1.4.0-3deepin1) unstable; urgency=medium
+
+  * No source change upload against python 3.12.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Mon, 08 Jul 2024 09:58:55 +0200
+
 zxing-cpp (1.4.0-3) unstable; urgency=medium
 
   * Team upload.
