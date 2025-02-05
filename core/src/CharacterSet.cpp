@@ -9,12 +9,13 @@
 #include "ZXAlgorithms.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace ZXing {
 
 struct CharacterSetName
 {
-	const char* name;
+	std::string_view name;
 	CharacterSet cs;
 };
 
@@ -45,9 +46,12 @@ static CharacterSetName NAME_TO_CHARSET[] = {
 	{"windows-1252",CharacterSet::Cp1252},
 	{"Cp1256",		CharacterSet::Cp1256},
 	{"windows-1256",CharacterSet::Cp1256},
-	{"UnicodeBigUnmarked", CharacterSet::UnicodeBig},
-	{"UTF-16BE",	CharacterSet::UnicodeBig},
-	{"UnicodeBig",	CharacterSet::UnicodeBig},
+	{"UTF-16BE",	CharacterSet::UTF16BE},
+	{"UTF-16LE",	CharacterSet::UTF16LE},
+	{"UTF-32BE",	CharacterSet::UTF32BE},
+	{"UTF-32LE",	CharacterSet::UTF32LE},
+	{"UnicodeBigUnmarked", CharacterSet::UTF16BE},
+	{"UnicodeBig",	CharacterSet::UTF16BE},
 	{"UTF-8",		CharacterSet::UTF8},
 	{"ASCII",		CharacterSet::ASCII},
 	{"US-ASCII",	CharacterSet::ASCII},
@@ -60,17 +64,28 @@ static CharacterSetName NAME_TO_CHARSET[] = {
 	{"BINARY",		CharacterSet::BINARY},
 };
 
-static std::string NormalizeName(std::string str)
+static std::string NormalizeName(std::string_view sv)
 {
+	std::string str(sv);
 	std::transform(str.begin(), str.end(), str.begin(), [](char c) { return (char)std::tolower(c); });
+#ifdef __cpp_lib_erase_if
+	std::erase_if(str, [](char c) { return Contains("_-[] ", c); });
+#else
 	str.erase(std::remove_if(str.begin(), str.end(), [](char c) { return Contains("_-[] ", c); }), str.end());
+#endif
 	return str;
 }
 
-CharacterSet CharacterSetFromString(const std::string& name)
+CharacterSet CharacterSetFromString(std::string_view name)
 {
 	auto i = FindIf(NAME_TO_CHARSET, [str = NormalizeName(name)](auto& v) { return NormalizeName(v.name) == str; });
 	return i == std::end(NAME_TO_CHARSET) ? CharacterSet::Unknown : i->cs;
+}
+
+std::string ToString(CharacterSet cs)
+{
+	auto i = FindIf(NAME_TO_CHARSET, [cs](auto& v) { return v.cs == cs; });
+	return i == std::end(NAME_TO_CHARSET) ? "" : std::string(i->name);
 }
 
 } // namespace ZXing

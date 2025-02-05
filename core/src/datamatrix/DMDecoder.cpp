@@ -8,15 +8,12 @@
 
 #include "BitMatrix.h"
 #include "BitSource.h"
-#include "CharacterSet.h"
 #include "DMBitLayout.h"
 #include "DMDataBlock.h"
 #include "DMVersion.h"
-#include "DecodeStatus.h"
 #include "DecoderResult.h"
 #include "GenericGF.h"
 #include "ReedSolomonDecoder.h"
-#include "TextDecoder.h"
 #include "ZXAlgorithms.h"
 #include "ZXTestSupport.h"
 
@@ -288,12 +285,18 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	int firstFNC1Position = 1;
 	Shift128 upperShift;
 
+	auto setError = [&error](Error&& e) {
+		// return only the first error but keep on decoding if possible
+		if (!error)
+			error = std::move(e);
+	};
+
 	// See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
 	try {
 		while (!done && bits.available() >= 8) {
 			int oneByte = bits.readBits(8);
 			switch (oneByte) {
-			case 0: throw FormatError("invalid 0 code word");
+			case 0: setError(FormatError("invalid 0 code word")); break;
 			case 129: done = true; break; // Pad -> we are done, ignore the rest of the bits
 			case 230: DecodeC40OrTextSegment(bits, result, Mode::C40); break;
 			case 231: DecodeBase256Segment(bits, result); break;
@@ -310,13 +313,13 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
-					throw FormatError("structured append tag must be first code word");
+					setError(FormatError("structured append tag must be first code word"));
 				ParseStructuredAppend(bits, sai);
 				firstFNC1Position = 5;
 				break;
 			case 234: // Reader Programming
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.2.4.9
-					throw FormatError("reader programming tag must be first code word");
+					setError(FormatError("reader programming tag must be first code word"));
 				readerInit = true;
 				break;
 			case 235: upperShift.set = true; break; // Upper Shift (shift to Extended ASCII)
@@ -336,28 +339,26 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				if (oneByte <= 128) { // ASCII data (ASCII value + 1)
 					result.push_back(upperShift(oneByte) - 1);
 				} else if (oneByte <= 229) { // 2-digit data 00-99 (Numeric Value + 130)
-					int value = oneByte - 130;
-					if (value < 10) // pad with '0' for single digit values
-						result.push_back('0');
-					result.append(std::to_string(value));
+					result.append(ToString(oneByte - 130, 2));
 				} else if (oneByte >= 242) { // Not to be used in ASCII encodation
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
 						break;
-					throw FormatError("invalid code word");
+					setError(FormatError("invalid code word"));
+					break;
 				}
 			}
 			firstCodeword = false;
 		}
 	} catch (Error e) {
-		error = std::move(e);
+		setError(std::move(e));
 	}
 
 	result.append(resultTrailer);
-	result.applicationIndicator = result.symbology.modifier == '2' ? "GS1" : "";
+	result.symbology.aiFlag = result.symbology.modifier == '2' ? AIFlag::GS1 : AIFlag::None;
 	result.symbology.modifier += isDMRE * 6;
 
-	return DecoderResult(std::move(bytes), std::move(result))
+	return DecoderResult(std::move(result))
 		.setError(std::move(error))
 		.setStructuredAppend(sai)
 		.setReaderInit(readerInit);
@@ -402,8 +403,10 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	if (codewords.empty())
 		return FormatError("Invalid number of code words");
 
+	bool fix259 = false; // see https://github.com/zxing-cpp/zxing-cpp/issues/259
+retry:
 	// Separate into data blocks
-	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version);
+	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
 	if (dataBlocks.empty())
 		return FormatError("Invalid number of data blocks");
 
@@ -413,20 +416,28 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	// Error-correct and copy data blocks together into a stream of bytes
 	const int dataBlocksCount = Size(dataBlocks);
 	for (int j = 0; j < dataBlocksCount; j++) {
-		auto& dataBlock = dataBlocks[j];
-		ByteArray& codewordBytes = dataBlock.codewords;
-		int numDataCodewords = dataBlock.numDataCodewords;
-		if (!CorrectErrors(codewordBytes, numDataCodewords))
+		auto& [numDataCodewords, codewords] = dataBlocks[j];
+		if (!CorrectErrors(codewords, numDataCodewords)) {
+			if(version->versionNumber == 24 && !fix259) {
+				fix259 = true;
+				goto retry;
+			}
 			return ChecksumError();
+		}
 
 		for (int i = 0; i < numDataCodewords; i++) {
 			// De-interlace data blocks.
-			resultBytes[i * dataBlocksCount + j] = codewordBytes[i];
+			resultBytes[i * dataBlocksCount + j] = codewords[i];
 		}
 	}
+#ifdef PRINT_DEBUG
+	if (fix259)
+		printf("-> needed retry with fix259 for 144x144 symbol\n");
+#endif
 
 	// Decode the contents of that stream of bytes
-	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE());
+	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE())
+		.setVersionNumber(version->versionNumber);
 }
 
 static BitMatrix FlippedL(const BitMatrix& bits)
@@ -447,7 +458,7 @@ DecoderResult Decode(const BitMatrix& bits)
 	//TODO:
 	// * unify bit mirroring helper code with QRReader?
 	// * rectangular symbols with the a size of 8 x Y are not supported a.t.m.
-	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.isValid()) {
+	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.error().type() != Error::Checksum) {
 		mirroredRes.setIsMirrored(true);
 		return mirroredRes;
 	}

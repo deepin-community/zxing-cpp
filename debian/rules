@@ -1,31 +1,53 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
-#  # Uncomment this to turn on verbose mode.
+# Uncomment this to turn on verbose mode.
 # export DH_VERBOSE=1
 #
-# # see FEATURE AREAS in dpkg-buildflags(1)
+# see FEATURE AREAS in dpkg-buildflags(1)
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 #
-# # see ENVIRONMENT in dpkg-buildflags(1)
-# # package maintainers to append CFLAGS
-# #export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
-# # package maintainers to append LDFLAGS
+# see ENVIRONMENT in dpkg-buildflags(1)
+# package maintainers to append CFLAGS
+#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
+# package maintainers to append LDFLAGS
 #export DEB_LDFLAGS_MAINT_APPEND =
 
-export QT_SELECT := 5
+# Try to export buildflags. No guarantee to be useful yet
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/default.mk
+include /usr/share/dpkg/buildflags.mk
+
 
 %:
 	dh $@ --with python3
 
-# Disabled flags:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+TEST_FLAG := ON
+else
+TEST_FLAG := OFF
+endif
+
+# PYTHON_EXECUTABLE: force selection of default python version
 #
-# BLACKBOX_TESTS: see #1004653
-# UNIT_TESTS: requires tests/samples/* files with unclear license
-# PYTHON_EXECUTABLE: force select default python version
+# UNIT_TESTS: should only be used in debug builds, disable it
+# following upstream recommendation.
+#
+# CMAKE_CXX_STANDARD: default to 20 (omitted).
+#     WARNING: changing this flag will break ABI!
+#
 override_dh_auto_configure:
 	dh_auto_configure -- \
-	        -DBUILD_BLACKBOX_TESTS=ON  \
-	        -DBUILD_UNIT_TESTS=OFF     \
-	        -DBUILD_PYTHON_MODULE=ON   \
-	        -DBUILD_SYSTEM_DEPS=ALWAYS \
+	        -DZXING_BLACKBOX_TESTS=$(TEST_FLAG)  \
+	        -DZXING_UNIT_TESTS=OFF               \
+	        -DZXING_PYTHON_MODULE=ON             \
+	        -DZXING_C_API=ON                     \
+	        -DZXING_USE_BUNDLED_ZINT=ON          \
+	        -DZXING_DEPENDENCIES=LOCAL           \
 	        -DPYTHON_EXECUTABLE:FILEPATH=$(shell command -v $$(py3versions -d))
+
+override_dh_auto_test:
+	# Exclude tests that needs samples directory
+	dh_auto_test -- \
+	        ARGS\+=-E \
+	        ARGS\+=ReaderTest\\\|ZXingCTest \
+	        $(NULL)

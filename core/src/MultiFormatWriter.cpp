@@ -20,7 +20,7 @@
 #include "pdf417/PDFWriter.h"
 #include "qrcode/QRErrorCorrectionLevel.h"
 #include "qrcode/QRWriter.h"
-#include "TextUtfEncoding.h"
+#include "Utf.h"
 
 #include <stdexcept>
 
@@ -49,9 +49,15 @@ MultiFormatWriter::encode(const std::wstring& contents, int width, int height) c
 		return exec0(std::move(writer));
 	};
 
+	auto exec2 = [&](auto&& writer) {
+		if (_encoding != CharacterSet::Unknown)
+			writer.setEncoding(_encoding);
+		return exec0(std::move(writer));
+	};
+
 	switch (_format) {
 	case BarcodeFormat::Aztec: return exec1(Aztec::Writer(), AztecEccLevel);
-	case BarcodeFormat::DataMatrix: return exec0(DataMatrix::Writer());
+	case BarcodeFormat::DataMatrix: return exec2(DataMatrix::Writer());
 	case BarcodeFormat::PDF417: return exec1(Pdf417::Writer(), Pdf417EccLevel);
 	case BarcodeFormat::QRCode: return exec1(QRCode::Writer(), QRCodeEccLevel);
 	case BarcodeFormat::Codabar: return exec0(OneD::CodabarWriter());
@@ -69,7 +75,7 @@ MultiFormatWriter::encode(const std::wstring& contents, int width, int height) c
 
 BitMatrix MultiFormatWriter::encode(const std::string& contents, int width, int height) const
 {
-	return encode(TextUtfEncoding::FromUtf8(contents), width, height);
+	return encode(FromUtf8(contents), width, height);
 }
 
 } // ZXing

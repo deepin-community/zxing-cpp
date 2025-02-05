@@ -3,7 +3,7 @@
  */
 // SPDX-License-Identifier: Apache-2.0
 
-#include "GS1.h"
+#include "HRI.h"
 
 #include "gtest/gtest.h"
 
@@ -258,6 +258,12 @@ TEST(HRIFromGS1, Single)
 	EXPECT_EQ(HRIFromGS1("72401234567890123456789"), "(7240)1234567890123456789");
 	// Too long
 	EXPECT_EQ(HRIFromGS1("7240123456789012345678901"), "");
+
+	// Fixed length
+	EXPECT_EQ(HRIFromGS1("72581/2"), "(7258)1/2");
+	// Incorrect lengths
+	EXPECT_EQ(HRIFromGS1("72581/10"), "");
+	EXPECT_EQ(HRIFromGS1("725812"), "");
 
 	// Max length
 	EXPECT_EQ(HRIFromGS1("80071234567890123456789012345678901234"), "(8007)1234567890123456789012345678901234");

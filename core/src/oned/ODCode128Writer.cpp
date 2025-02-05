@@ -8,7 +8,7 @@
 
 #include "ODCode128Patterns.h"
 #include "ODWriterHelper.h"
-#include "TextUtfEncoding.h"
+#include "Utf.h"
 
 #include <list>
 #include <numeric>
@@ -153,7 +153,7 @@ Code128Writer::encode(const std::wstring& contents, int width, int height) const
 		default:
 			if (c > 127) {
 				// support for FNC4 isn't implemented, no full Latin-1 character set available at the moment
-				throw std::invalid_argument(std::string("Bad character in input: ") + static_cast<char>(c));
+				throw std::invalid_argument("Bad character in input: " + ToUtf8(contents.substr(i, 1)));
 			}
 		}
 	}
@@ -255,7 +255,7 @@ Code128Writer::encode(const std::wstring& contents, int width, int height) const
 
 BitMatrix Code128Writer::encode(const std::string& contents, int width, int height) const
 {
-	return encode(TextUtfEncoding::FromUtf8(contents), width, height);
+	return encode(FromUtf8(contents), width, height);
 }
 
 } // namespace ZXing::OneD

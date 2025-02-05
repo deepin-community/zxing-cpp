@@ -9,6 +9,7 @@
 #include "Flags.h"
 
 #include <string>
+#include <string_view>
 
 namespace ZXing {
 
@@ -38,44 +39,28 @@ enum class BarcodeFormat
 	UPCA            = (1 << 14), ///< UPC-A
 	UPCE            = (1 << 15), ///< UPC-E
 	MicroQRCode     = (1 << 16), ///< Micro QR Code
+	RMQRCode        = (1 << 17), ///< Rectangular Micro QR Code
+	DXFilmEdge      = (1 << 18), ///< DX Film Edge Barcode
+	DataBarLimited  = (1 << 19), ///< GS1 DataBar Limited
 
-	LinearCodes = Codabar | Code39 | Code93 | Code128 | EAN8 | EAN13 | ITF | DataBar | DataBarExpanded | UPCA | UPCE,
-	MatrixCodes = Aztec | DataMatrix | MaxiCode | PDF417 | QRCode | MicroQRCode,
+	LinearCodes = Codabar | Code39 | Code93 | Code128 | EAN8 | EAN13 | ITF | DataBar | DataBarExpanded | DataBarLimited
+				  | DXFilmEdge | UPCA | UPCE,
+	MatrixCodes = Aztec | DataMatrix | MaxiCode | PDF417 | QRCode | MicroQRCode | RMQRCode,
 	Any         = LinearCodes | MatrixCodes,
 
-	// Deprecated names, kept for compatibility at the moment
-	NONE [[deprecated]]         = None,
-	AZTEC [[deprecated]]        = Aztec,
-	CODABAR [[deprecated]]      = Codabar,
-	CODE_39 [[deprecated]]      = Code39,
-	CODE_93 [[deprecated]]      = Code93,
-	CODE_128 [[deprecated]]     = Code128,
-	DATA_MATRIX [[deprecated]]  = DataMatrix,
-	EAN_8 [[deprecated]]        = EAN8,
-	EAN_13 [[deprecated]]       = EAN13,
-	MAXICODE [[deprecated]]     = MaxiCode,
-	PDF_417 [[deprecated]]      = PDF417,
-	QR_CODE [[deprecated]]      = QRCode,
-	RSS_14 [[deprecated]]       = DataBar,
-	RSS_EXPANDED [[deprecated]] = DataBarExpanded,
-	UPC_A [[deprecated]]        = UPCA,
-	UPC_E [[deprecated]]        = UPCE,
-	OneDCodes [[deprecated]]    = LinearCodes,
-	TwoDCodes [[deprecated]]    = MatrixCodes,
-
-	_max                        = MicroQRCode, ///> implementation detail, don't use
+	_max = DataBarLimited, ///> implementation detail, don't use
 };
 
 ZX_DECLARE_FLAGS(BarcodeFormats, BarcodeFormat)
 
-const char* ToString(BarcodeFormat format);
+std::string ToString(BarcodeFormat format);
 std::string ToString(BarcodeFormats formats);
 
 /**
  * @brief Parse a string into a BarcodeFormat. '-' and '_' are optional.
  * @return None if str can not be parsed as a valid enum value
  */
-BarcodeFormat BarcodeFormatFromString(const std::string& str);
+BarcodeFormat BarcodeFormatFromString(std::string_view str);
 
 /**
  * @brief Parse a string into a set of BarcodeFormats.
@@ -84,6 +69,6 @@ BarcodeFormat BarcodeFormatFromString(const std::string& str);
  * e.g. "EAN-8 qrcode, Itf" would be parsed into [EAN8, QRCode, ITF].
  * @throws std::invalid_parameter if the string can not be fully parsed.
  */
-BarcodeFormats BarcodeFormatsFromString(const std::string& str);
+BarcodeFormats BarcodeFormatsFromString(std::string_view str);
 
 } // ZXing

@@ -5,8 +5,8 @@
 
 #include "oned/ODCode128Reader.h"
 
-#include "DecodeHints.h"
-#include "Result.h"
+#include "ReaderOptions.h"
+#include "Barcode.h"
 
 #include "gtest/gtest.h"
 
@@ -14,7 +14,7 @@ using namespace ZXing;
 using namespace ZXing::OneD;
 
 // Helper to call decodePattern()
-static Result parse(const int startPattern, PatternRow row)
+static Barcode parse(const int startPattern, PatternRow row)
 {
 	if (startPattern == 'A') {
 		row.insert(row.begin(), { 0, 2, 1, 1, 4, 1, 2 });
@@ -26,8 +26,8 @@ static Result parse(const int startPattern, PatternRow row)
 	row.insert(row.end(), { 2, 3, 3, 1, 1, 1, 2, 0 }); // Stop pattern
 
 	std::unique_ptr<Code128Reader::DecodingState> state;
-	DecodeHints hints;
-	Code128Reader reader(hints);
+	ReaderOptions opts;
+	Code128Reader reader(opts);
 	PatternView next(row);
 	return reader.decodePattern(0, next, state);
 }
@@ -47,7 +47,7 @@ TEST(ODCode128ReaderTest, SymbologyIdentifier)
 		PatternRow row({ 4, 1, 1, 1, 3, 1, 2, 2, 1, 2, 3, 1, 2, 2, 2, 1, 2, 2, 1, 3, 2, 1, 3, 1 });
 		auto result = parse('C', row);
 		EXPECT_EQ(result.symbologyIdentifier(), "]C1");
-		EXPECT_EQ(result.text(), "2001");
+		EXPECT_EQ(result.text(TextMode::HRI), "(20)01");
 	}
 
 	{
@@ -79,7 +79,7 @@ TEST(ODCode128ReaderTest, SymbologyIdentifier)
 		PatternRow row({ 2, 1, 2, 3, 2, 1, 4, 1, 1, 1, 3, 1, 1, 3, 1, 1, 2, 3, 3, 2, 2, 2, 1, 1 });
 		auto result = parse('B', row);
 		EXPECT_EQ(result.symbologyIdentifier(), "]C0"); // Just ignoring, not giving FormatError
-		EXPECT_EQ(result.text(), "?\u001DB");
+		EXPECT_EQ(result.text(), "?<GS>B");
 	}
 }
 

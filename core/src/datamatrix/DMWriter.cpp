@@ -8,12 +8,12 @@
 
 #include "BitMatrix.h"
 #include "ByteArray.h"
+#include "CharacterSet.h"
 #include "DMBitLayout.h"
 #include "DMECEncoder.h"
 #include "DMHighLevelEncoder.h"
 #include "DMSymbolInfo.h"
-#include "DMSymbolShape.h"
-#include "TextUtfEncoding.h"
+#include "Utf.h"
 
 #include <stdexcept>
 #include <string>
@@ -76,7 +76,8 @@ static BitMatrix EncodeLowLevel(const BitMatrix& placement, const SymbolInfo& sy
 }
 
 Writer::Writer() :
-	_shapeHint(SymbolShape::NONE)
+	_shapeHint(SymbolShape::NONE),
+	_encoding(CharacterSet::Unknown)
 {
 }
 
@@ -92,7 +93,7 @@ Writer::encode(const std::wstring& contents, int width, int height) const
 	}
 
 	//1. step: Data encodation
-	auto encoded = Encode(contents, _shapeHint, _minWidth, _minHeight, _maxWidth, _maxHeight);
+	auto encoded = Encode(contents, _encoding, _shapeHint, _minWidth, _minHeight, _maxWidth, _maxHeight);
 	const SymbolInfo* symbolInfo = SymbolInfo::Lookup(Size(encoded), _shapeHint, _minWidth, _minHeight, _maxWidth, _maxHeight);
 	if (symbolInfo == nullptr) {
 		throw std::invalid_argument("Can't find a symbol arrangement that matches the message. Data codewords: " + std::to_string(encoded.size()));
@@ -113,7 +114,7 @@ Writer::encode(const std::wstring& contents, int width, int height) const
 
 BitMatrix Writer::encode(const std::string& contents, int width, int height) const
 {
-	return encode(TextUtfEncoding::FromUtf8(contents), width, height);
+	return encode(FromUtf8(contents), width, height);
 }
 
 } // namespace ZXing::DataMatrix
