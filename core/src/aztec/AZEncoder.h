@@ -10,8 +10,7 @@
 
 #include <string>
 
-namespace ZXing {
-namespace Aztec {
+namespace ZXing::Aztec {
 
 /**
 * Aztec 2D code representation
@@ -37,9 +36,9 @@ class Encoder
 public:
 	static const int DEFAULT_EC_PERCENT = 33; // default minimal percentage of error check words
 	static const int DEFAULT_AZTEC_LAYERS = 0;
+	static const int AZTEC_RUNE_LAYERS = 0xFF;
 
 	static EncodeResult Encode(const std::string& data, int minECCPercent, int userSpecifiedLayers);
 };
 
-} // Aztec
-} // ZXing
+} // namespace ZXing::Aztec

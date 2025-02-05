@@ -8,11 +8,11 @@
 
 #include "BinaryBitmap.h"
 #include "BitMatrix.h"
-#include "DecodeHints.h"
 #include "DecoderResult.h"
+#include "DetectorResult.h"
 #include "MCBitMatrixParser.h"
 #include "MCDecoder.h"
-#include "Result.h"
+#include "Barcode.h"
 
 namespace ZXing::MaxiCode {
 
@@ -39,11 +39,12 @@ static BitMatrix ExtractPureBits(const BitMatrix& image)
 			}
 		}
 	}
+
+	//TODO: need to return position info
 	return result;
 }
 
-Result
-Reader::decode(const BinaryBitmap& image) const
+Barcode Reader::decode(const BinaryBitmap& image) const
 {
 	auto binImg = image.getBitMatrix();
 	if (binImg == nullptr)
@@ -54,7 +55,12 @@ Reader::decode(const BinaryBitmap& image) const
 	if (bits.empty())
 		return {};
 
-	return Result(Decode(bits), {}, BarcodeFormat::MaxiCode);
+	DecoderResult decRes = Decode(bits);
+	// TODO: before we can meaningfully return a ChecksumError result, we need to check the center for the presence of the finder pattern
+	if (!decRes.isValid())
+		return {};
+
+	return Barcode(std::move(decRes), DetectorResult{}, BarcodeFormat::MaxiCode);
 }
 
 } // namespace ZXing::MaxiCode

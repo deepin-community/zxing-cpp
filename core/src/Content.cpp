@@ -7,10 +7,16 @@
 
 #include "CharacterSet.h"
 #include "ECI.h"
-#include "GS1.h"
+#include "HRI.h"
 #include "TextDecoder.h"
-#include "TextUtfEncoding.h"
+#include "Utf.h"
 #include "ZXAlgorithms.h"
+
+#if !defined(ZXING_READERS) && !defined(ZXING_WRITERS)
+#include "Version.h"
+#endif
+
+#include <cctype>
 
 namespace ZXing {
 
@@ -51,9 +57,7 @@ void Content::switchEncoding(ECI eci, bool isECI)
 
 Content::Content() {}
 
-Content::Content(ByteArray&& bytes, SymbologyIdentifier si, std::string ai)
-	: bytes(std::move(bytes)), applicationIndicator(std::move(ai)), symbology(si)
-{}
+Content::Content(ByteArray&& bytes, SymbologyIdentifier si) : bytes(std::move(bytes)), symbology(si) {}
 
 void Content::switchEncoding(CharacterSet cs)
 {
@@ -93,16 +97,17 @@ bool Content::canProcess() const
 	return std::all_of(encodings.begin(), encodings.end(), [](Encoding e) { return CanProcess(e.eci); });
 }
 
-std::wstring Content::render(bool withECI) const
+std::string Content::render(bool withECI) const
 {
 	if (empty() || !canProcess())
 		return {};
 
-	std::wstring res;
+#ifdef ZXING_READERS
+	std::string res;
 	if (withECI)
-		res = TextDecoder::FromLatin1(symbology.toString(true));
+		res = symbology.toString(true);
 	ECI lastECI = ECI::Unknown;
-	auto fallbackCS = CharacterSetFromString(defaultCharset);
+	auto fallbackCS = defaultCharset;
 	if (!hasECI && fallbackCS == CharacterSet::Unknown)
 		fallbackCS = guessEncoding();
 
@@ -120,14 +125,14 @@ std::wstring Content::render(bool withECI) const
 				eci = ECI::Binary;
 
 			if (lastECI != eci)
-				TextDecoder::AppendLatin1(res, ToString(eci));
+				res += ToString(eci);
 			lastECI = eci;
 
-			std::wstring tmp;
+			std::string tmp;
 			TextDecoder::Append(tmp, bytes.data() + begin, end - begin, cs);
 			for (auto c : tmp) {
 				res += c;
-				if (c == L'\\') // in the ECI protocol a '\' has to be doubled
+				if (c == '\\') // in the ECI protocol a '\' has to be doubled
 					res += c;
 			}
 		} else {
@@ -136,25 +141,40 @@ std::wstring Content::render(bool withECI) const
 	});
 
 	return res;
+#else
+	//TODO: replace by proper construction from encoded data from within zint
+	return std::string(bytes.asString());
+#endif
 }
 
 std::string Content::text(TextMode mode) const
 {
-	switch(mode) {
-	case TextMode::Utf8: return TextUtfEncoding::ToUtf8(render(false));
-	case TextMode::Utf8ECI: return TextUtfEncoding::ToUtf8(render(true));
+	switch (mode) {
+	case TextMode::Plain: return render(false);
+	case TextMode::ECI: return render(true);
 	case TextMode::HRI:
-		if (applicationIndicator == "GS1")
-			return HRIFromGS1(text(TextMode::Utf8));
-		else if (type() == ContentType::Text)
-			return text(TextMode::Utf8);
-		else
-			return text(TextMode::Escaped);
+		switch (type()) {
+#ifdef ZXING_READERS
+		case ContentType::GS1: {
+			auto plain = render(false);
+			auto hri = HRIFromGS1(plain);
+			return hri.empty() ? plain : hri;
+		}
+		case ContentType::ISO15434: return HRIFromISO15434(render(false));
+		case ContentType::Text: return render(false);
+#endif
+		default: return text(TextMode::Escaped);
+		}
 	case TextMode::Hex: return ToHex(bytes);
-	case TextMode::Escaped: return TextUtfEncoding::ToUtf8(render(false), true);
+	case TextMode::Escaped: return EscapeNonGraphical(render(false));
 	}
 
 	return {}; // silence compiler warning
+}
+
+std::wstring Content::utfW() const
+{
+	return FromUtf8(render(false));
 }
 
 ByteArray Content::bytesECI() const
@@ -181,6 +201,7 @@ ByteArray Content::bytesECI() const
 
 CharacterSet Content::guessEncoding() const
 {
+#ifdef ZXING_READERS
 	// assemble all blocks with unknown encoding
 	ByteArray input;
 	ForEachECIBlock([&](ECI eci, int begin, int end) {
@@ -192,17 +213,21 @@ CharacterSet Content::guessEncoding() const
 		return CharacterSet::Unknown;
 
 	return TextDecoder::GuessEncoding(input.data(), input.size(), CharacterSet::ISO8859_1);
+#else
+	return CharacterSet::Unknown;
+#endif
 }
 
 ContentType Content::type() const
 {
+#ifdef ZXING_READERS
 	if (empty())
 		return ContentType::Text;
 
 	if (!canProcess())
 		return ContentType::UnknownECI;
 
-	if (applicationIndicator == "GS1")
+	if (symbology.aiFlag == AIFlag::GS1)
 		return ContentType::GS1;
 
 	// check for the absolut minimum of a ISO 15434 conforming message ("[)>" + RS + digit + digit)
@@ -217,7 +242,7 @@ ContentType Content::type() const
 		binaryECIs.push_back((!IsText(eci)
 							  || (ToInt(eci) > 0 && ToInt(eci) < 28 && ToInt(eci) != 25
 								  && std::any_of(bytes.begin() + begin, bytes.begin() + end,
-												 [](auto c) { return c < 0x20 && c != 0xa && c != 0xd; }))));
+												 [](auto c) { return c < 0x20 && c != 0x9 && c != 0xa && c != 0xd; }))));
 	});
 
 	if (!Contains(binaryECIs, true))
@@ -226,6 +251,10 @@ ContentType Content::type() const
 		return ContentType::Binary;
 
 	return ContentType::Mixed;
+#else
+	//TODO: replace by proper construction from encoded data from within zint
+	return ContentType::Text;
+#endif
 }
 
 } // namespace ZXing

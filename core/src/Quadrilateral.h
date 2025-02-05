@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cmath>
+#include <string>
 
 namespace ZXing {
 
@@ -53,6 +54,12 @@ Quadrilateral<PointT> Rectangle(int width, int height, typename PointT::value_t 
 		PointT{margin, margin}, {width - margin, margin}, {width - margin, height - margin}, {margin, height - margin}};
 }
 
+template <typename PointT = PointF>
+Quadrilateral<PointT> CenteredSquare(int size)
+{
+	return Scale(Quadrilateral(PointT{-1, -1}, {1, -1}, {1, 1}, {-1, 1}), size / 2);
+}
+
 template <typename PointT = PointI>
 Quadrilateral<PointT> Line(int y, int xStart, int xStop)
 {
@@ -73,8 +80,9 @@ bool IsConvex(const Quadrilateral<PointT>& poly)
 		auto d2 = poly[i] - poly[(i + 1) % N];
 		auto cp = cross(d1, d2);
 
-		m = std::min(std::fabs(m), cp);
-		M = std::max(std::fabs(M), cp);
+		// TODO: see if the isInside check for all boundary points in GridSampler is still required after fixing the wrong fabs()
+		// application in the following line
+		UpdateMinMax(m, M, std::fabs(cp));
 
 		if (i == 0)
 			sign = cp > 0;
@@ -105,10 +113,12 @@ PointT Center(const Quadrilateral<PointT>& q)
 }
 
 template <typename PointT>
-Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1)
+Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1, bool mirror = false)
 {
 	Quadrilateral<PointT> res;
 	std::rotate_copy(q.begin(), q.begin() + ((n + 4) % 4), q.end(), res.begin());
+	if (mirror)
+		std::swap(res[1], res[3]);
 	return res;
 }
 
@@ -123,12 +133,44 @@ bool IsInside(const PointT& p, const Quadrilateral<PointT>& q)
 }
 
 template <typename PointT>
+Quadrilateral<PointT> BoundingBox(const Quadrilateral<PointT>& q)
+{
+	auto [minX, maxX] = std::minmax({q[0].x, q[1].x, q[2].x, q[3].x});
+	auto [minY, maxY] = std::minmax({q[0].y, q[1].y, q[2].y, q[3].y});
+	return {PointT{minX, minY}, {maxX, minY}, {maxX, maxY}, {minX, maxY}};
+}
+
+template <typename PointT>
 bool HaveIntersectingBoundingBoxes(const Quadrilateral<PointT>& a, const Quadrilateral<PointT>& b)
 {
-	// TODO: this is only a quick and dirty approximation that works for the trivial standard cases
-	bool x = b.topRight().x < a.topLeft().x || b.topLeft().x > a.topRight().x;
-	bool y = b.bottomLeft().y < a.topLeft().y || b.topLeft().y > a.bottomLeft().y;
+	auto bba = BoundingBox(a), bbb = BoundingBox(b);
+
+	bool x = bbb.topRight().x < bba.topLeft().x || bbb.topLeft().x > bba.topRight().x;
+	bool y = bbb.bottomLeft().y < bba.topLeft().y || bbb.topLeft().y > bba.bottomLeft().y;
 	return !(x || y);
+}
+
+template <typename PointT>
+Quadrilateral<PointT> Blend(const Quadrilateral<PointT>& a, const Quadrilateral<PointT>& b)
+{
+	auto dist2First = [r = a[0]](auto s, auto t) { return distance(s, r) < distance(t, r); };
+	// rotate points such that the the two topLeft points are closest to each other
+	auto offset = std::min_element(b.begin(), b.end(), dist2First) - b.begin();
+
+	Quadrilateral<PointT> res;
+	for (int i = 0; i < 4; ++i)
+		res[i] = (a[i] + b[(i + offset) % 4]) / 2;
+
+	return res;
+}
+
+template <typename T>
+std::string ToString(const Quadrilateral<PointT<T>>& points)
+{
+	std::string res;
+	for (const auto& p : points)
+		res += std::to_string(p.x) + "x" + std::to_string(p.y) + (&p == &points.back() ? "" : " ");
+	return res;
 }
 
 } // ZXing

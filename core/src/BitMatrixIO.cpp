@@ -6,8 +6,7 @@
 
 #include "BitMatrixIO.h"
 
-#include "BitArray.h"
-
+#include <array>
 #include <fstream>
 #include <sstream>
 
@@ -18,11 +17,9 @@ std::string ToString(const BitMatrix& matrix, char one, char zero, bool addSpace
 	std::string result;
 	result.reserve((addSpace ? 2 : 1) * (matrix.width() * matrix.height()) + matrix.height());
 	for (int y = 0; y < matrix.height(); ++y) {
-		BitArray row;
-		matrix.getRow(y, row);
 		if (printAsCString)
 			result += '"';
-		for (auto bit : row) {
+		for (auto bit : matrix.row(y)) {
 			result += bit ? one : zero;
 			if (addSpace)
 				result += ' ';
@@ -32,6 +29,23 @@ std::string ToString(const BitMatrix& matrix, char one, char zero, bool addSpace
 		result += '\n';
 	}
 	return result;
+}
+
+std::string ToString(const BitMatrix& matrix, bool inverted)
+{
+	constexpr auto map = std::array{" ", "▀", "▄", "█"};
+	std::string res;
+
+	for (int y = 0; y < matrix.height(); y += 2) {
+		for (int x = 0; x < matrix.width(); ++x) {
+			int tp = matrix.get(x, y) ^ inverted;
+			int bt = (matrix.height() == 1 && tp) || (y + 1 < matrix.height() && (matrix.get(x, y + 1) ^ inverted));
+			res += map[tp | (bt << 1)];
+		}
+		res.push_back('\n');
+	}
+
+	return res;
 }
 
 std::string ToSVG(const BitMatrix& matrix)
@@ -79,10 +93,10 @@ BitMatrix ParseBitMatrix(const std::string& str, char one, bool expectSpace)
 
 void SaveAsPBM(const BitMatrix& matrix, const std::string filename, int quietZone)
 {
-	auto out = Inflate(matrix.copy(), 0, 0, quietZone);
+	auto out = ToMatrix<uint8_t>(Inflate(matrix.copy(), 0, 0, quietZone));
 	std::ofstream file(filename);
-	file << "P1\n" << out.width() << ' ' << out.height() << '\n';
-	file << ToString(out, '1', '0', true);
+	file << "P5\n" << out.width() << ' ' << out.height() << "\n255\n";
+	file.write(reinterpret_cast<const char*>(out.data()), out.size());
 }
 
 } // ZXing

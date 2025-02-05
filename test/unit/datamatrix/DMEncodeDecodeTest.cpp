@@ -7,13 +7,7 @@
 #include "BitMatrixIO.h"
 #include "DecoderResult.h"
 #include "datamatrix/DMDecoder.h"
-#include "datamatrix/DMSymbolShape.h"
 #include "datamatrix/DMWriter.h"
-
-#include <algorithm>
-#ifndef NDEBUG
-#include <fstream>
-#endif
 
 #include "gtest/gtest.h"
 

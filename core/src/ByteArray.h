@@ -9,11 +9,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
-#include <vector>
-
-#ifdef __cpp_lib_string_view
 #include <string_view>
-#endif
+#include <vector>
 
 namespace ZXing {
 
@@ -30,12 +27,10 @@ public:
 
 	void append(const ByteArray& other) { insert(end(), other.begin(), other.end()); }
 
-#ifdef __cpp_lib_string_view
 	std::string_view asString(size_t pos = 0, size_t len = std::string_view::npos) const
 	{
 		return std::string_view(reinterpret_cast<const char*>(data()), size()).substr(pos, len);
 	}
-#endif
 };
 
 inline std::string ToHex(const ByteArray& bytes)
@@ -43,7 +38,13 @@ inline std::string ToHex(const ByteArray& bytes)
 	std::string res(bytes.size() * 3, ' ');
 
 	for (size_t i = 0; i < bytes.size(); ++i)
-		sprintf(&res[i * 3], "%02X ", bytes[i]);
+	{
+#ifdef _MSC_VER
+		sprintf_s(&res[i * 3], 4, "%02X ", bytes[i]);
+#else
+		snprintf(&res[i * 3], 4, "%02X ", bytes[i]);
+#endif
+	}
 
 	return res.substr(0, res.size()-1);
 }

@@ -6,7 +6,6 @@
 
 #include "PDFDetector.h"
 #include "BinaryBitmap.h"
-#include "DecodeStatus.h"
 #include "BitMatrix.h"
 #include "ZXNullable.h"
 #include "Pattern.h"
@@ -26,11 +25,6 @@ static const int INDEXES_STOP_PATTERN[] = { 6, 2, 7, 3 };
 static const float MAX_AVG_VARIANCE = 0.42f;
 static const float MAX_INDIVIDUAL_VARIANCE = 0.8f;
 
-// B S B S B S B S Bar/Space pattern
-// 11111111 0 1 0 1 0 1 000
-static const std::vector<int> START_PATTERN = { 8, 1, 1, 1, 1, 1, 1, 3 };
-// 1111111 0 1 000 1 0 1 00 1
-static const std::vector<int> STOP_PATTERN = { 7, 1, 1, 3, 1, 1, 1, 2, 1 };
 static const int MAX_PIXEL_DRIFT = 3;
 static const int MAX_PATTERN_DRIFT = 5;
 // if we set the value too low, then we don't detect the correct height of the bar if the start patterns are damaged.
@@ -227,6 +221,12 @@ CopyToResult(std::array<Nullable<ResultPoint>, 8>& result, const std::array<Null
 */
 static std::array<Nullable<ResultPoint>, 8> FindVertices(const BitMatrix& matrix, int startRow, int startColumn)
 {
+	// B S B S B S B S Bar/Space pattern
+	// 11111111 0 1 0 1 0 1 000
+	static const std::vector<int> START_PATTERN = { 8, 1, 1, 1, 1, 1, 1, 3 };
+	// 1111111 0 1 000 1 0 1 00 1
+	static const std::vector<int> STOP_PATTERN = { 7, 1, 1, 3, 1, 1, 1, 2, 1 };
+
 	int width = matrix.width();
 	int height = matrix.height();
 
@@ -303,7 +303,6 @@ static std::list<std::array<Nullable<ResultPoint>, 8>> DetectBarcode(const BitMa
 	return barcodeCoordinates;
 }
 
-#ifdef ZX_FAST_BIT_STORAGE
 bool HasStartPattern(const BitMatrix& m, bool rotate90)
 {
 	constexpr FixedPattern<8, 17> START_PATTERN = { 8, 1, 1, 1, 1, 1, 1, 3 };
@@ -313,7 +312,7 @@ bool HasStartPattern(const BitMatrix& m, bool rotate90)
 	int end = rotate90 ? m.width() : m.height();
 
 	for (int r = ROW_STEP; r < end; r += ROW_STEP) {
-		m.getPatternRow(r, row, rotate90);
+		GetPatternRow(m, r, row, rotate90);
 
 		if (FindLeftGuard(row, minSymbolWidth, START_PATTERN, 2).isValid())
 			return true;
@@ -324,7 +323,6 @@ bool HasStartPattern(const BitMatrix& m, bool rotate90)
 
 	return false;
 }
-#endif
 
 /**
 * <p>Detects a PDF417 Code in an image. Only checks 0 and 180 degree rotations.</p>
@@ -335,7 +333,7 @@ bool HasStartPattern(const BitMatrix& m, bool rotate90)
 */
 Detector::Result Detector::Detect(const BinaryBitmap& image, bool multiple, bool tryRotate)
 {
-	// construct a 'dummy' shared pointer, just be able to pass it up the call chain in DecodeStatus
+	// construct a 'dummy' shared pointer, just be able to pass it up the call chain in DetectorResult
 	// TODO: reimplement PDF Detector
 	auto binImg = std::shared_ptr<const BitMatrix>(image.getBitMatrix(), [](const BitMatrix*){});
 	if (!binImg)
@@ -343,11 +341,10 @@ Detector::Result Detector::Detect(const BinaryBitmap& image, bool multiple, bool
 
 	Result result;
 
-	for (int rotate90 = false; rotate90 <= tryRotate && result.points.empty(); ++rotate90) {
-#if defined(ZX_FAST_BIT_STORAGE)
+	for (int rotate90 = 0; rotate90 <= static_cast<int>(tryRotate); ++rotate90) {
 		if (!HasStartPattern(*binImg, rotate90))
 			continue;
-#endif
+
 		result.rotation = 90 * rotate90;
 		if (rotate90) {
 			auto newBits = std::make_shared<BitMatrix>(binImg->copy());
@@ -356,20 +353,20 @@ Detector::Result Detector::Detect(const BinaryBitmap& image, bool multiple, bool
 		}
 
 		result.points = DetectBarcode(*binImg, multiple);
+		result.bits = binImg;
 		if (result.points.empty()) {
 			auto newBits = std::make_shared<BitMatrix>(binImg->copy());
 			newBits->rotate180();
-			binImg = newBits;
-			result.points = DetectBarcode(*binImg, multiple);
+			result.points = DetectBarcode(*newBits, multiple);
 			result.rotation += 180;
+			result.bits = newBits;
 		}
+
+		if (!result.points.empty())
+			return result;
 	}
 
-	if (result.points.empty())
-		return {};
-
-	result.bits = binImg;
-	return result;
+	return {};
 }
 
 } // Pdf417

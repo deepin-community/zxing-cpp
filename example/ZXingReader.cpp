@@ -4,17 +4,19 @@
 */
 // SPDX-License-Identifier: Apache-2.0
 
-#define ZX_USE_UTF8 1 // see Result.h
-
-#include "ReadBarcode.h"
-#include "TextUtfEncoding.h"
 #include "GTIN.h"
+#include "ReadBarcode.h"
+#include "Version.h"
+
+#ifdef ZXING_EXPERIMENTAL_API
+#include "WriteBarcode.h"
+#endif
 
 #include <cctype>
 #include <chrono>
-#include <clocale>
 #include <cstring>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,21 +28,42 @@
 
 using namespace ZXing;
 
+struct CLI
+{
+	std::vector<std::string> filePaths;
+	std::string outPath;
+	int forceChannels = 0;
+	int rotate = 0;
+	bool oneLine = false;
+	bool bytesOnly = false;
+	bool showSymbol = false;
+};
+
 static void PrintUsage(const char* exePath)
 {
 	std::cout << "Usage: " << exePath << " [options] <image file>...\n"
 			  << "    -fast      Skip some lines/pixels during detection (faster)\n"
 			  << "    -norotate  Don't try rotated image during detection (faster)\n"
+			  << "    -noinvert  Don't search for inverted codes during detection (faster)\n"
 			  << "    -noscale   Don't try downscaled images during detection (faster)\n"
-			  << "    -format <FORMAT[,...]>\n"
+			  << "    -formats <FORMAT[,...]>\n"
 			  << "               Only detect given format(s) (faster)\n"
+			  << "    -single    Stop after the first barcode is detected (faster)\n"
 			  << "    -ispure    Assume the image contains only a 'pure'/perfect code (faster)\n"
-			  << "    -errors    Include results with errors (like checksum error)\n"
-			  << "    -1         Print only file name, content/error on one line per file/barcode (implies '-escape')\n"
-			  << "    -escape    Escape non-graphical characters in angle brackets\n"
+			  << "    -errors    Include barcodes with errors (like checksum error)\n"
+			  << "    -binarizer <local|global|fixed>\n"
+			  << "               Binarizer to be used for gray to binary conversion\n"
+			  << "    -mode <plain|eci|hri|escaped>\n"
+			  << "               Text mode used to render the raw byte content into text\n"
+			  << "    -1         Print only file name, content/error on one line per file/barcode (implies '-mode Escaped')\n"
+#ifdef ZXING_EXPERIMENTAL_API
+			  << "    -symbol    Print the detected symbol (if available)\n"
+#endif
 			  << "    -bytes     Write (only) the bytes content of the symbol(s) to stdout\n"
 			  << "    -pngout <file name>\n"
 			  << "               Write a copy of the input image with barcodes outlined by a green line\n"
+			  << "    -help      Print usage information\n"
+			  << "    -version   Print version information\n"
 			  << "\n"
 			  << "Supported formats are:\n";
 	for (auto f : BarcodeFormats::all()) {
@@ -49,53 +72,95 @@ static void PrintUsage(const char* exePath)
 	std::cout << "Formats can be lowercase, with or without '-', separated by ',' and/or '|'\n";
 }
 
-static bool ParseOptions(int argc, char* argv[], DecodeHints& hints, bool& oneLine, bool& angleEscape, bool& bytesOnly,
-						 std::vector<std::string>& filePaths, std::string& outPath)
+static bool ParseOptions(int argc, char* argv[], ReaderOptions& options, CLI& cli)
 {
+#ifdef ZXING_EXPERIMENTAL_API
+	options.setTryDenoise(true);
+#endif
+
 	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "-fast") == 0) {
-			hints.setTryHarder(false);
-		} else if (strcmp(argv[i], "-norotate") == 0) {
-			hints.setTryRotate(false);
-		} else if (strcmp(argv[i], "-noscale") == 0) {
-			hints.setDownscaleThreshold(0);
-		} else if (strcmp(argv[i], "-ispure") == 0) {
-			hints.setIsPure(true);
-			hints.setBinarizer(Binarizer::FixedThreshold);
-		} else if (strcmp(argv[i], "-errors") == 0) {
-			hints.setReturnErrors(true);
-		} else if (strcmp(argv[i], "-format") == 0) {
+		auto is = [&](const char* str) { return strlen(argv[i]) > 1 && strncmp(argv[i], str, strlen(argv[i])) == 0; };
+		if (is("-fast")) {
+			options.setTryHarder(false);
+#ifdef ZXING_EXPERIMENTAL_API
+			options.setTryDenoise(false);
+#endif
+		} else if (is("-norotate")) {
+			options.setTryRotate(false);
+		} else if (is("-noinvert")) {
+			options.setTryInvert(false);
+		} else if (is("-noscale")) {
+			options.setTryDownscale(false);
+		} else if (is("-single")) {
+			options.setMaxNumberOfSymbols(1);
+		} else if (is("-ispure")) {
+			options.setIsPure(true);
+			options.setBinarizer(Binarizer::FixedThreshold);
+		} else if (is("-errors")) {
+			options.setReturnErrors(true);
+		} else if (is("-formats")) {
 			if (++i == argc)
 				return false;
 			try {
-				hints.setFormats(BarcodeFormatsFromString(argv[i]));
+				options.setFormats(BarcodeFormatsFromString(argv[i]));
 			} catch (const std::exception& e) {
 				std::cerr << e.what() << "\n";
 				return false;
 			}
-		} else if (strcmp(argv[i], "-1") == 0) {
-			oneLine = true;
-		} else if (strcmp(argv[i], "-escape") == 0) {
-			angleEscape = true;
-		} else if (strcmp(argv[i], "-bytes") == 0) {
-			bytesOnly = true;
-		} else if (strcmp(argv[i], "-pngout") == 0) {
+		} else if (is("-binarizer")) {
 			if (++i == argc)
 				return false;
-			outPath = argv[i];
+			else if (is("local"))
+				options.setBinarizer(Binarizer::LocalAverage);
+			else if (is("global"))
+				options.setBinarizer(Binarizer::GlobalHistogram);
+			else if (is("fixed"))
+				options.setBinarizer(Binarizer::FixedThreshold);
+			else
+				return false;
+		} else if (is("-mode")) {
+			if (++i == argc)
+				return false;
+			else if (is("plain"))
+				options.setTextMode(TextMode::Plain);
+			else if (is("eci"))
+				options.setTextMode(TextMode::ECI);
+			else if (is("hri"))
+				options.setTextMode(TextMode::HRI);
+			else if (is("escaped"))
+				options.setTextMode(TextMode::Escaped);
+			else
+				return false;
+		} else if (is("-1")) {
+			cli.oneLine = true;
+		} else if (is("-bytes")) {
+			cli.bytesOnly = true;
+		} else if (is("-symbol")) {
+			cli.showSymbol = true;
+		} else if (is("-pngout")) {
+			if (++i == argc)
+				return false;
+			cli.outPath = argv[i];
+		} else if (is("-channels")) {
+			if (++i == argc)
+				return false;
+			cli.forceChannels = atoi(argv[i]);
+		} else if (is("-rotate")) {
+			if (++i == argc)
+				return false;
+			cli.rotate = atoi(argv[i]);
+		} else if (is("-help") || is("--help")) {
+			PrintUsage(argv[0]);
+			exit(0);
+		} else if (is("-version") || is("--version")) {
+			std::cout << "ZXingReader " << ZXING_VERSION_STR << "\n";
+			exit(0);
 		} else {
-			filePaths.push_back(argv[i]);
+			cli.filePaths.push_back(argv[i]);
 		}
 	}
 
-	return !filePaths.empty();
-}
-
-std::ostream& operator<<(std::ostream& os, const Position& points)
-{
-	for (const auto& p : points)
-		os << p.x << "x" << p.y << " ";
-	return os;
+	return !cli.filePaths.empty();
 }
 
 void drawLine(const ImageView& iv, PointI a, PointI b, bool error)
@@ -106,6 +171,8 @@ void drawLine(const ImageView& iv, PointI a, PointI b, bool error)
 	for (int i = 0; i < steps; ++i) {
 		auto p = PointI(centered(a + i * dir));
 		auto* dst = const_cast<uint8_t*>(iv.data(p.x, p.y));
+		if (dst < iv.data(0, 0) || dst > iv.data(iv.width() - 1, iv.height() - 1))
+			continue;
 		dst[R] = error ? 0xff : 0;
 		dst[G] = error ? 0 : 0xff;
 		dst[B] = 0;
@@ -118,139 +185,158 @@ void drawRect(const ImageView& image, const Position& pos, bool error)
 		drawLine(image, pos[i], pos[(i + 1) % 4], error);
 }
 
-std::string escapeNonGraphical(const std::string& str)
-{
-	return TextUtfEncoding::ToUtf8(TextUtfEncoding::FromUtf8(str), true);
-}
-
 int main(int argc, char* argv[])
 {
-	DecodeHints hints;
-	std::vector<std::string> filePaths;
-	Results allResults;
-	std::string outPath;
-	bool oneLine = false;
-	bool angleEscape = false;
-	bool bytesOnly = false;
+	ReaderOptions options;
+	CLI cli;
+	Barcodes allBarcodes;
 	int ret = 0;
 
+	options.setTextMode(TextMode::HRI);
+	options.setEanAddOnSymbol(EanAddOnSymbol::Read);
 
-	if (!ParseOptions(argc, argv, hints, oneLine, angleEscape, bytesOnly, filePaths, outPath)) {
+	if (!ParseOptions(argc, argv, options, cli)) {
 		PrintUsage(argv[0]);
 		return -1;
 	}
 
-	hints.setEanAddOnSymbol(EanAddOnSymbol::Read);
-
-	if (angleEscape)
-		std::setlocale(LC_CTYPE, "en_US.UTF-8"); // Needed so `std::iswgraph()` in `ToUtf8(angleEscape)` does not 'swallow' all printable non-ascii utf8 chars
-
 	std::cout.setf(std::ios::boolalpha);
 
-	for (const auto& filePath : filePaths) {
+	if (!cli.outPath.empty())
+		cli.forceChannels = 3; // the drawing code only works for RGB data
+
+	for (const auto& filePath : cli.filePaths) {
 		int width, height, channels;
-		std::unique_ptr<stbi_uc, void(*)(void*)> buffer(stbi_load(filePath.c_str(), &width, &height, &channels, 3), stbi_image_free);
+		std::unique_ptr<stbi_uc, void (*)(void*)> buffer(
+			filePath == "-" ? stbi_load_from_file(stdin, &width, &height, &channels, cli.forceChannels)
+							: stbi_load(filePath.c_str(), &width, &height, &channels, cli.forceChannels),
+			stbi_image_free);
 		if (buffer == nullptr) {
-			std::cerr << "Failed to read image: " << filePath << "\n";
+			std::cerr << "Failed to read image: " << filePath << " (" << stbi_failure_reason() << ")" << "\n";
 			return -1;
 		}
+		channels = cli.forceChannels ? cli.forceChannels : channels;
 
-		ImageView image{buffer.get(), width, height, ImageFormat::RGB};
-		auto results = ReadBarcodes(image, hints);
+		auto ImageFormatFromChannels = std::array{ImageFormat::None, ImageFormat::Lum, ImageFormat::LumA, ImageFormat::RGB, ImageFormat::RGBA};
+		ImageView image{buffer.get(), width, height, ImageFormatFromChannels.at(channels)};
+		auto barcodes = ReadBarcodes(image.rotated(cli.rotate), options);
 
 		// if we did not find anything, insert a dummy to produce some output for each file
-		if (results.empty())
-			results.emplace_back();
+		if (barcodes.empty())
+			barcodes.emplace_back();
 
-		allResults.insert(allResults.end(), results.begin(), results.end());
-		if (filePath == filePaths.back()) {
-			auto merged = MergeStructuredAppendSequences(allResults);
+		allBarcodes.insert(allBarcodes.end(), barcodes.begin(), barcodes.end());
+		if (filePath == cli.filePaths.back()) {
+			auto merged = MergeStructuredAppendSequences(allBarcodes);
 			// report all merged sequences as part of the last file to make the logic not overly complicated here
-			results.insert(results.end(), merged.begin(), merged.end());
+			barcodes.insert(barcodes.end(), std::make_move_iterator(merged.begin()), std::make_move_iterator(merged.end()));
 		}
 
-		for (auto&& result : results) {
+		for (auto&& barcode : barcodes) {
 
-			if (!outPath.empty())
-				drawRect(image, result.position(), bool(result.error()));
+			if (!cli.outPath.empty())
+				drawRect(image, barcode.position(), bool(barcode.error()));
 
-			ret |= static_cast<int>(result.error().type());
+			ret |= static_cast<int>(barcode.error().type());
 
-			if (bytesOnly) {
-				std::cout.write(reinterpret_cast<const char*>(result.bytes().data()), result.bytes().size());
+			if (cli.bytesOnly) {
+				std::cout.write(reinterpret_cast<const char*>(barcode.bytes().data()), barcode.bytes().size());
 				continue;
 			}
 
-			if (oneLine) {
-				std::cout << filePath << " " << ToString(result.format());
-				if (result.isValid())
-					std::cout << " \"" << escapeNonGraphical(result.text()) << "\"";
-				else if (result.error())
-					std::cout << " " << ToString(result.error());
+			if (cli.oneLine) {
+				std::cout << filePath << " " << ToString(barcode.format());
+				if (barcode.isValid())
+					std::cout << " \"" << barcode.text(TextMode::Escaped) << "\"";
+				else if (barcode.error())
+					std::cout << " " << ToString(barcode.error());
 				std::cout << "\n";
 				continue;
 			}
 
-			if (filePaths.size() > 1 || results.size() > 1) {
+			if (cli.filePaths.size() > 1 || barcodes.size() > 1) {
 				static bool firstFile = true;
 				if (!firstFile)
 					std::cout << "\n";
-				if (filePaths.size() > 1)
+				if (cli.filePaths.size() > 1)
 					std::cout << "File:       " << filePath << "\n";
 				firstFile = false;
 			}
 
-			if (result.format() == BarcodeFormat::None) {
+			if (barcode.format() == BarcodeFormat::None) {
 				std::cout << "No barcode found\n";
 				continue;
 			}
 
-			std::cout << "Text:       \"" << (angleEscape ? escapeNonGraphical(result.text()) : result.text()) << "\"\n"
-					  << "Bytes:      " << ToHex(result.bytes()) << "\n"
-					  << "BytesECI:   " << ToHex(result.bytesECI()) << "\n"
-					  << "Format:     " << ToString(result.format()) << "\n"
-					  << "Identifier: " << result.symbologyIdentifier() << "\n"
-					  << "Content:    " << ToString(result.contentType()) << "\n"
-					  << "HasECI:     " << result.hasECI() << "\n"
-					  << "Position:   " << result.position() << "\n"
-					  << "Rotation:   " << result.orientation() << " deg\n"
-					  << "IsMirrored: " << result.isMirrored() << "\n";
+			std::cout << "Text:       \"" << barcode.text() << "\"\n"
+					  << "Bytes:      " << ToHex(options.textMode() == TextMode::ECI ? barcode.bytesECI() : barcode.bytes()) << "\n"
+					  << "Format:     " << ToString(barcode.format()) << "\n"
+					  << "Identifier: " << barcode.symbologyIdentifier() << "\n"
+					  << "Content:    " << ToString(barcode.contentType()) << "\n"
+					  << "HasECI:     " << barcode.hasECI() << "\n"
+					  << "Position:   " << ToString(barcode.position()) << "\n"
+					  << "Rotation:   " << barcode.orientation() << " deg\n"
+					  << "IsMirrored: " << barcode.isMirrored() << "\n"
+					  << "IsInverted: " << barcode.isInverted() << "\n";
 
 			auto printOptional = [](const char* key, const std::string& v) {
 				if (!v.empty())
 					std::cout << key << v << "\n";
 			};
 
-			printOptional("EC Level:   ", result.ecLevel());
-			printOptional("Error:      ", ToString(result.error()));
+			printOptional("EC Level:   ", barcode.ecLevel());
+			printOptional("Version:    ", barcode.version());
+			printOptional("Error:      ", ToString(barcode.error()));
 
-			if (result.lineCount())
-				std::cout << "Lines:      " << result.lineCount() << "\n";
+			if (barcode.lineCount())
+				std::cout << "Lines:      " << barcode.lineCount() << "\n";
 
 			if ((BarcodeFormat::EAN13 | BarcodeFormat::EAN8 | BarcodeFormat::UPCA | BarcodeFormat::UPCE)
-					.testFlag(result.format())) {
-				printOptional("Country:    ", GTIN::LookupCountryIdentifier(result.text(), result.format()));
-				printOptional("Add-On:     ", GTIN::EanAddOn(result));
-				printOptional("Price:      ", GTIN::Price(GTIN::EanAddOn(result)));
-				printOptional("Issue #:    ", GTIN::IssueNr(GTIN::EanAddOn(result)));
-			} else if (result.format() == BarcodeFormat::ITF && Size(result.bytes()) == 14) {
-				printOptional("Country:    ", GTIN::LookupCountryIdentifier(result.text(), result.format()));
+					.testFlag(barcode.format())) {
+				printOptional("Country:    ", GTIN::LookupCountryIdentifier(barcode.text(), barcode.format()));
+				printOptional("Add-On:     ", GTIN::EanAddOn(barcode));
+				printOptional("Price:      ", GTIN::Price(GTIN::EanAddOn(barcode)));
+				printOptional("Issue #:    ", GTIN::IssueNr(GTIN::EanAddOn(barcode)));
+			} else if (barcode.format() == BarcodeFormat::ITF && Size(barcode.bytes()) == 14) {
+				printOptional("Country:    ", GTIN::LookupCountryIdentifier(barcode.text(), barcode.format()));
 			}
 
-			if (result.isPartOfSequence())
-				std::cout << "Structured Append: symbol " << result.sequenceIndex() + 1 << " of "
-						  << result.sequenceSize() << " (parity/id: '" << result.sequenceId() << "')\n";
-			else if (result.sequenceSize() > 0)
-				std::cout << "Structured Append: merged result from " << result.sequenceSize() << " symbols (parity/id: '"
-						  << result.sequenceId() << "')\n";
+			if (barcode.isPartOfSequence())
+				std::cout << "Structured Append: symbol " << barcode.sequenceIndex() + 1 << " of "
+						  << barcode.sequenceSize() << " (parity/id: '" << barcode.sequenceId() << "')\n";
+			else if (barcode.sequenceSize() > 0)
+				std::cout << "Structured Append: merged result from " << barcode.sequenceSize() << " symbols (parity/id: '"
+						  << barcode.sequenceId() << "')\n";
 
-			if (result.readerInit())
+			if (barcode.readerInit())
 				std::cout << "Reader Initialisation/Programming\n";
+
+#ifdef ZXING_EXPERIMENTAL_API
+			if (cli.showSymbol && barcode.symbol().data())
+				std::cout << "Symbol:\n" << WriteBarcodeToUtf8(barcode);
+#endif
 		}
 
-		if (Size(filePaths) == 1 && !outPath.empty())
-			stbi_write_png(outPath.c_str(), image.width(), image.height(), 3, image.data(0, 0), image.rowStride());
+		if (Size(cli.filePaths) == 1 && !cli.outPath.empty())
+			stbi_write_png(cli.outPath.c_str(), image.width(), image.height(), 3, image.data(), image.rowStride());
 
+#ifdef NDEBUG
+		if (getenv("MEASURE_PERF")) {
+			auto startTime = std::chrono::high_resolution_clock::now();
+			auto duration = startTime - startTime;
+			int N = 0;
+			int blockSize = 1;
+			do {
+				for (int i = 0; i < blockSize; ++i)
+					ReadBarcodes(image, options);
+				N += blockSize;
+				duration = std::chrono::high_resolution_clock::now() - startTime;
+				if (blockSize < 1000 && duration < std::chrono::milliseconds(100))
+					blockSize *= 10;
+			} while (duration < std::chrono::seconds(1));
+			printf("time: %5.2f ms per frame\n", double(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()) / N);
+		}
+#endif
 	}
 
 	return ret;

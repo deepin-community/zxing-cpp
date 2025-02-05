@@ -11,8 +11,6 @@
 #include "Error.h"
 #include "GTIN.h"
 
-#include <cmath>
-
 namespace ZXing::OneD::DataBar {
 
 constexpr char GS = 29; // FNC1
@@ -54,14 +52,14 @@ static std::string DecodeGeneralPurposeBits(BitArrayView& bits)
 			if (bits.size() < 7) {
 				int v = bits.readBits(4);
 				if (v > 0)
-					res.push_back('0' + v - 1);
+					res.push_back(ToDigit(v - 1));
 			} else if (bits.peakBits(4) == 0) {
 				bits.skipBits(4);
 				state = ALPHA;
 			} else {
 				int v = bits.readBits(7);
 				for (int digit : {(v - 8) / 11, (v - 8) % 11})
-					res.push_back(digit == 10 ? GS : '0' + digit);
+					res.push_back(digit == 10 ? GS : ToDigit(digit));
 			}
 			break;
 		case ALPHA:
@@ -115,20 +113,10 @@ static std::string DecodeGeneralPurposeBits(BitArrayView& bits)
 	return res;
 }
 
-static void AppendNDigits(std::string& s, int v, int n)
-{
-	int div = std::pow(10, n-1);
-	while (v / div == 0 && div > 1) {
-		s.push_back('0');
-		div /= 10;
-	}
-	s.append(std::to_string(v));
-}
-
 static std::string DecodeCompressedGTIN(std::string prefix, BitArrayView& bits)
 {
 	for (int i = 0; i < 4; ++i)
-		AppendNDigits(prefix, bits.readBits(10), 3);
+		prefix.append(ToString(bits.readBits(10), 3));
 
 	prefix.push_back(GTIN::ComputeCheckDigit(prefix.substr(2)));
 
@@ -146,8 +134,6 @@ static std::string DecodeAI01AndOtherAIs(BitArrayView& bits)
 
 	auto header = DecodeCompressedGTIN("01" + std::to_string(bits.readBits(4)), bits);
 	auto trailer = DecodeGeneralPurposeBits(bits);
-	if (trailer.empty())
-		return {};
 
 	return header + trailer;
 }
@@ -163,7 +149,7 @@ static std::string DecodeAI013103(BitArrayView& bits)
 {
 	std::string buffer = DecodeAI01GTIN(bits);
 	buffer.append("3103");
-	AppendNDigits(buffer, bits.readBits(15), 6);
+	buffer.append(ToString(bits.readBits(15), 6));
 
 	return buffer;
 }
@@ -173,7 +159,7 @@ static std::string DecodeAI01320x(BitArrayView& bits)
 	std::string buffer = DecodeAI01GTIN(bits);
 	int weight = bits.readBits(15);
 	buffer.append(weight < 10000 ? "3202" : "3203");
-	AppendNDigits(buffer, weight < 10000 ? weight : weight - 10000, 6);
+	buffer.append(ToString(weight < 10000 ? weight : weight - 10000, 6));
 
 	return buffer;
 }
@@ -188,7 +174,7 @@ static std::string DecodeAI0139yx(BitArrayView& bits, char y)
 	buffer.append(std::to_string(bits.readBits(2)));
 
 	if (y == '3')
-		AppendNDigits(buffer, bits.readBits(10), 3);
+		buffer.append(ToString(bits.readBits(10), 3));
 
 	auto trailer = DecodeGeneralPurposeBits(bits);
 	if (trailer.empty())
@@ -204,7 +190,7 @@ static std::string DecodeAI013x0x1x(BitArrayView& bits, const char* aiPrefix, co
 
 	int weight = bits.readBits(20);
 	buffer.append(std::to_string(weight / 100000));
-	AppendNDigits(buffer, weight % 100000, 6);
+	buffer.append(ToString(weight % 100000, 6));
 
 	int date = bits.readBits(16);
 	if (date != 38400) {
@@ -216,9 +202,9 @@ static std::string DecodeAI013x0x1x(BitArrayView& bits, const char* aiPrefix, co
 		date /= 12;
 		int year = date;
 
-		AppendNDigits(buffer, year, 2);
-		AppendNDigits(buffer, month, 2);
-		AppendNDigits(buffer, day, 2);
+		buffer.append(ToString(year, 2));
+		buffer.append(ToString(month, 2));
+		buffer.append(ToString(day, 2));
 	}
 
 	return buffer;
@@ -226,34 +212,37 @@ static std::string DecodeAI013x0x1x(BitArrayView& bits, const char* aiPrefix, co
 
 std::string DecodeExpandedBits(const BitArray& _bits)
 {
-	auto bits = BitArrayView(_bits);
-	bits.readBits(1); // skip linkage bit
+	try {
+		auto bits = BitArrayView(_bits);
+		bits.readBits(1); // skip linkage bit
 
-	if (bits.peakBits(1) == 1)
-		return DecodeAI01AndOtherAIs(bits.skipBits(1));
+		if (bits.peakBits(1) == 1)
+			return DecodeAI01AndOtherAIs(bits.skipBits(1));
 
-	if (bits.peakBits(2) == 0)
-		return DecodeAnyAI(bits.skipBits(2));
+		if (bits.peakBits(2) == 0)
+			return DecodeAnyAI(bits.skipBits(2));
 
-	switch (bits.peakBits(4)) {
-	case 4: return DecodeAI013103(bits.skipBits(4));
-	case 5: return DecodeAI01320x(bits.skipBits(4));
-	}
+		switch (bits.peakBits(4)) {
+		case 4: return DecodeAI013103(bits.skipBits(4));
+		case 5: return DecodeAI01320x(bits.skipBits(4));
+		}
 
-	switch (bits.peakBits(5)) {
-	case 12: return DecodeAI0139yx(bits.skipBits(5), '2');
-	case 13: return DecodeAI0139yx(bits.skipBits(5), '3');
-	}
+		switch (bits.peakBits(5)) {
+		case 12: return DecodeAI0139yx(bits.skipBits(5), '2');
+		case 13: return DecodeAI0139yx(bits.skipBits(5), '3');
+		}
 
-	switch (bits.readBits(7)) {
-	case 56: return DecodeAI013x0x1x(bits, "310", "11");
-	case 57: return DecodeAI013x0x1x(bits, "320", "11");
-	case 58: return DecodeAI013x0x1x(bits, "310", "13");
-	case 59: return DecodeAI013x0x1x(bits, "320", "13");
-	case 60: return DecodeAI013x0x1x(bits, "310", "15");
-	case 61: return DecodeAI013x0x1x(bits, "320", "15");
-	case 62: return DecodeAI013x0x1x(bits, "310", "17");
-	case 63: return DecodeAI013x0x1x(bits, "320", "17");
+		switch (bits.readBits(7)) {
+		case 56: return DecodeAI013x0x1x(bits, "310", "11");
+		case 57: return DecodeAI013x0x1x(bits, "320", "11");
+		case 58: return DecodeAI013x0x1x(bits, "310", "13");
+		case 59: return DecodeAI013x0x1x(bits, "320", "13");
+		case 60: return DecodeAI013x0x1x(bits, "310", "15");
+		case 61: return DecodeAI013x0x1x(bits, "320", "15");
+		case 62: return DecodeAI013x0x1x(bits, "310", "17");
+		case 63: return DecodeAI013x0x1x(bits, "320", "17");
+		}
+	} catch (Error) {
 	}
 
 	return {};
